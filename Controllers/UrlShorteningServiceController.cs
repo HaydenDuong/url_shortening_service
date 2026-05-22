@@ -33,6 +33,9 @@ public class ShortenController : ControllerBase
     // async Task<ActionResult<ShortUrlResponse>> = Framework types - async action that returns HTTP result + JSON type
     // ActionResult<ShortUrlResponse> = Framework - Wrapper for 201 + body, 400, etc.
     // Create() - "Create" is based on one's choice
+    // [FromBody] is needed because url is input in JSON body like {"url": "..."} - see url_shortening_service.http file
+    // async - means this function can use "await" inside it
+    // await - pause this method until the operation with "await" is done
     [HttpPost]
     public async Task<ActionResult<ShortUrlResponse>> Create(
         [FromBody] ShortUrlCreateUpdate request)
@@ -68,6 +71,96 @@ public class ShortenController : ControllerBase
             // --- 5) 201 Created + body (Location header points at future GET URL) ---
             return Created($"/shorten/{entity.ShortCode}", response);
         }
+    
+    // Retrieving a shortCode
+    // GET http://localhost:5184/shorten/abc123
+    [HttpGet("{shortCode}")]
+    public async Task<ActionResult<ShortUrlResponse>> GetByShortCode(string shortCode)
+    {
+        // shortCode comes from URL - "abc123", not from JSON body
+        var entity = await _context.ShortUrls.FirstOrDefaultAsync(s => s.ShortCode == shortCode);
+
+        if (entity is null) return NotFound(); // 404 - Not Found
+
+        var response = new ShortUrlResponse
+        {
+            Id = entity.Id,
+            Url = entity.Url,
+            ShortCode = entity.ShortCode,
+            CreatedAt = entity.CreatedAt,
+            UpdatedAt = entity.UpdatedAt
+        };
+
+        return Ok(response); // 200 + JSON
+    }
+
+    // Update the existing URL in DB
+    [HttpPut("{shortCode}")]
+    public async Task<ActionResult<ShortUrlResponse>> UpdateUrl(
+        string shortCode,
+        [FromBody] ShortUrlCreateUpdate request)
+    {
+        // check if the shortCode from URL is legit or not
+        var entity = await _context.ShortUrls.FirstOrDefaultAsync(s => s.ShortCode == shortCode);
+
+        if (entity is null) return NotFound();
+
+        entity.Url = request.Url;
+        entity.UpdatedAt = DateTime.UtcNow;
+
+        await _context.SaveChangesAsync();
+
+        // Create a new Response to return back to UI
+        var response = new ShortUrlResponse
+        {
+            Id = entity.Id,
+            Url = entity.Url,
+            ShortCode = entity.ShortCode,
+            CreatedAt = entity.CreatedAt,
+            UpdatedAt = entity.UpdatedAt
+        };
+
+        return Ok(response);
+
+    }
+
+    // Delete an existing record based on shortCode in input URL
+    [HttpDelete("{shortCode}")]
+    public async Task<ActionResult> Delete(string shortCode)
+    {
+        var entity = await _context.ShortUrls.FirstOrDefaultAsync(s => s.ShortCode == shortCode);
+
+        if (entity is null) return NotFound();
+
+        _context.ShortUrls.Remove(entity);
+        await _context.SaveChangesAsync();
+
+        return NoContent(); //204 - No Content, empty body
+    }
+
+    // GET Statistic for a particular shortCode based on input URL
+    [HttpGet("{shortCode}/stats")]
+    public async Task<ActionResult<ShortUrlResponseStats>> GetStat(string shortCode)
+    {
+        var entity = await _context.ShortUrls.FirstOrDefaultAsync(s => s.ShortCode == shortCode);
+
+        if (entity is null) return NotFound();
+
+        entity.AccessCount += 1;
+        await _context.SaveChangesAsync();
+
+        var response = new ShortUrlResponseStats
+        {
+            Id = entity.Id,
+            Url = entity.Url,
+            ShortCode = entity.ShortCode,
+            CreatedAt = entity.CreatedAt,
+            UpdatedAt = entity.UpdatedAt,
+            AccessCount = entity.AccessCount
+        };
+
+        return Ok(response);
+    }
 
     // Method for Generate Unique ShortCode for input URL
     private string GenerateUniqueShortCode()

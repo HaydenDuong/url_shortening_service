@@ -1,6 +1,8 @@
 @url_shortening_service_HostAddress = http://localhost:5184
 
+### POST Method Testing
 ### Create short URL (expect 201)
+### "Content-Type" = "The body I am sending right now is in this format"
 POST {{url_shortening_service_HostAddress}}/shorten
 Content-Type: application/json
 
@@ -17,3 +19,29 @@ Content-Type: application/json
 {
   "url": "https://www.google.com"
 }
+
+### GET Method Testing
+### GET valid ShortCode (expect 200 + JSON body)
+### Need to add valid ShortCode (try POST method first)
+### "Accept" = "When you reply, I prefer this format" because this is a retrieval for the server, but not sending to the latter anything
+GET {{url_shortening_service_HostAddress}}/shorten/InEm0V
+Accept: application/json
+
+### GET invalid ShortCode (expect 404)
+GET {{url_shortening_service_HostAddress}}/shorten/INVALID_CODE
+Accept: application/json
+
+### PUT Method Testing
+PUT {{url_shortening_service_HostAddress}}/shorten/none
+Content-Type: application/json
+
+{
+  "url": "https://www.aqw.com"
+}
+
+### DEL Method Testing
+DELETE {{url_shortening_service_HostAddress}}/shorten/fDqu4X
+
+### GET STATS Method Testing
+GET {{url_shortening_service_HostAddress}}/shorten/arlbot/stats
+Accept: application/json
