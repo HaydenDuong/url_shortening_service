@@ -34,3 +34,4 @@ C:\Users\Hayden Duong\Desktop\learning_projects\url_shortening_service\obj\Debug
 C:\Users\Hayden Duong\Desktop\learning_projects\url_shortening_service\obj\Debug\net10.0\url_shortening_service.pdb
 C:\Users\Hayden Duong\Desktop\learning_projects\url_shortening_service\obj\Debug\net10.0\url_shortening_service.genruntimeconfig.cache
 C:\Users\Hayden Duong\Desktop\learning_projects\url_shortening_service\obj\Debug\net10.0\ref\url_shortening_service.dll
+C:\Users\Hayden Duong\Desktop\learning_projects\url_shortening_service\obj\Debug\net10.0\url_shortening_service.sourcelink.json

@@ -1,6 +1,19 @@
 @url_shortening_service_HostAddress = http://localhost:5184
 
-GET {{url_shortening_service_HostAddress}}/weatherforecast/
-Accept: application/json
+### Create short URL (expect 201)
+POST {{url_shortening_service_HostAddress}}/shorten
+Content-Type: application/json
+
+{
+  "url": "https://www.example.com/some/long/url"
+}
 
 ###
+
+### Second create (expect 201, new id and shortCode)
+POST {{url_shortening_service_HostAddress}}/shorten
+Content-Type: application/json
+
+{
+  "url": "https://www.google.com"
+}
