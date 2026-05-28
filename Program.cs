@@ -20,10 +20,15 @@ builder.Services.AddControllers();
 builder.Services.AddOpenApi();
 
 // Tell DI: "When someone needs AppDbContext, build it like this."
+
 // UseInMemoryDatabase = fake DB in RAM (data gone when app stops — fine for learning).
 // Later swap to UseNpgsql(connectionString) for real Postgres — AppDbContext file stays same.
 // "UrlShortenerDB" is a database name
-builder.Services.AddDbContext<AppDbContext>(options => options.UseInMemoryDatabase("UrlShortenerDB"));
+// builder.Services.AddDbContext<AppDbContext>(options => options.UseInMemoryDatabase("UrlShortenerDB"));
+
+// Using PostgreSQL instead of RAM
+builder.Services.AddDbContext<AppDbContext>(options => options.UseNpgsql(builder.Configuration.GetConnectionString("Postgres")));
+
 
 var app = builder.Build();
 

@@ -24,7 +24,7 @@ Content-Type: application/json
 ### GET valid ShortCode (expect 200 + JSON body)
 ### Need to add valid ShortCode (try POST method first)
 ### "Accept" = "When you reply, I prefer this format" because this is a retrieval for the server, but not sending to the latter anything
-GET {{url_shortening_service_HostAddress}}/shorten/InEm0V
+GET {{url_shortening_service_HostAddress}}/shorten/VqP9j9
 Accept: application/json
 
 ### GET invalid ShortCode (expect 404)
@@ -32,7 +32,7 @@ GET {{url_shortening_service_HostAddress}}/shorten/INVALID_CODE
 Accept: application/json
 
 ### PUT Method Testing
-PUT {{url_shortening_service_HostAddress}}/shorten/none
+PUT {{url_shortening_service_HostAddress}}/shorten/lOVa4J
 Content-Type: application/json
 
 {
