@@ -1,0 +1,16 @@
+name: url-shortener-project
+services:
+  db:
+    image: postgres:16
+    container_name: urlshortener_webapp_DB
+    ports:
+      - "5434:5432"
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: UrlShortenerDB
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+
+volumes:
+  pgdata:
