@@ -1,4 +1,3 @@
-using System.Data;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using url_shortening_service.Data;
@@ -40,6 +39,49 @@ public class ShortenController : ControllerBase
     public async Task<ActionResult<ShortUrlResponse>> Create(
         [FromBody] ShortUrlCreateUpdate request)
         {
+            // Check if client sends a no JSON body request or malformed body that cannot be bound properly
+            if (request is null)
+            {
+                return BadRequest("Request body is required.");
+            }
+
+            // Check if the input URL value is exist, is not blank, is real absolute URL, and using http / https
+            // Try to normalize the URL if valid
+            // TryNormalizeHttpUrl will return TRUE if the URL is valid, else it will be FALSE
+            // "out var normalizedUrl" means the method can return a YES / No result and also output a cleaned-up URL value
+            // If the URL is valid, "normalizedUrl" gets assigned a safe value like: "https://www.google.com/"
+            // "out" is used in this case because we want to make sure this URL is valid, and save it as cleaned version
+            // Because, request.Url could be:
+            // empty, whitespace, "hello", "www.google.com" (missing http// or https// before it), "ftp://example.com"
+            // normalizedUrl ở đây sẽ là output do có included "out" trước var normalizedUrl
+            // Actuall logic behind "TryNormalizeHttpUrl() is":
+            // private static bool TryNormalizeHttpUrl(string? rawUrl, out string normalizedUrl)
+            // {
+            //      normalizedUrl = string.Empty;
+
+            //      if (string.IsNullOrWhiteSpace(rawUrl))
+            //      {
+            //          return false;
+            //      }
+
+            //      if (!Uri.TryCreate(rawUrl.Trim(), UriKind.Absolute, out var uri))
+            //      {
+            //            return false;
+            //      }
+
+            //      if (uri.Scheme != Uri.UriSchemeHttp && uri.Scheme != Uri.UriSchemeHttps)
+            //      {
+            //            return false;
+            //      }
+
+            //      normalizedUrl = uri.ToString();
+            //      return true;
+            // }
+            if (!TryNormalizeHttpUrl(request.Url, out var normalizedUrl))
+            {
+                return BadRequest("Url must be a valid absolute http or https URL.");
+            }
+
             // --- 1) Generate a random short code (random + unique) ---
             string shortCode = GenerateUniqueShortCode();
 
@@ -47,7 +89,7 @@ public class ShortenController : ControllerBase
             var now = DateTime.UtcNow;
             var entity = new ShortUrlStorage
             {
-                Url = request.Url,
+                Url = normalizedUrl,
                 ShortCode = shortCode,
                 CreatedAt = now,
                 UpdatedAt = now,
@@ -100,12 +142,22 @@ public class ShortenController : ControllerBase
         string shortCode,
         [FromBody] ShortUrlCreateUpdate request)
     {
+        if (request is null)
+        {
+            return BadRequest("Request body is required.");
+        }
+
+        if (!TryNormalizeHttpUrl(request.Url, out var normalizedUrl))
+        {
+            return BadRequest("Url must be a valid absolute http or https URL.");
+        }
+
         // check if the shortCode from URL is legit or not
         var entity = await _context.ShortUrls.FirstOrDefaultAsync(s => s.ShortCode == shortCode);
 
         if (entity is null) return NotFound();
 
-        entity.Url = request.Url;
+        entity.Url = normalizedUrl;
         entity.UpdatedAt = DateTime.UtcNow;
 
         await _context.SaveChangesAsync();
@@ -146,9 +198,6 @@ public class ShortenController : ControllerBase
 
         if (entity is null) return NotFound();
 
-        entity.AccessCount += 1;
-        await _context.SaveChangesAsync();
-
         var response = new ShortUrlResponseStats
         {
             Id = entity.Id,
@@ -178,6 +227,29 @@ public class ShortenController : ControllerBase
             if (!exists)
                 return code;
         }
+    }
+
+    private static bool TryNormalizeHttpUrl(string? rawUrl, out string normalizedUrl)
+    {
+        normalizedUrl = string.Empty;
+
+        if (string.IsNullOrWhiteSpace(rawUrl))
+        {
+            return false;
+        }
+
+        if (!Uri.TryCreate(rawUrl.Trim(), UriKind.Absolute, out var uri))
+        {
+            return false;
+        }
+
+        if (uri.Scheme != Uri.UriSchemeHttp && uri.Scheme != Uri.UriSchemeHttps)
+        {
+            return false;
+        }
+
+        normalizedUrl = uri.ToString();
+        return true;
     }
 }
 
