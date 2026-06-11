@@ -1,5 +1,25 @@
+// 1st - HTTP request arrives
+// 2nd - ASP.NET needs to create ShortenController
+// 3rd - ShortenController's Constructor requires AppDbContext
+// 4th - ASP.NET creates AppDbContext using registered options
+// 5th - ASP.NET passes it into the controller
+// By default, AppDbContext registeres it with a scoped lifetime => 1 AppDbContext instance per HTTP request
+// Workflow
+// 1. ASP.NET receives the request.
+// 2. ASP.NET creates ShortenController.
+// 3. DI creates one AppDbContext for the request.
+// 4. The controller creates a ShortUrlStorage object.
+// 5. ShortUrls.Add(entity) marks it as Added.
+// 6. SaveChangesAsync() asks EF to persist tracked changes.
+// 7. EF uses the model configuration.
+// 8. Npgsql converts the operation into PostgreSQL communication.
+// 9. PostgreSQL checks constraints, including unique ShortCode.
+// 10. PostgreSQL inserts the row.
+// 11. EF updates entity.Id with the generated database ID.
+// 12. The request finishes and the context is disposed.
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
+using Npgsql;
 using url_shortening_service.Data;
 using url_shortening_service.Models;
 
@@ -54,29 +74,6 @@ public class ShortenController : ControllerBase
             // Because, request.Url could be:
             // empty, whitespace, "hello", "www.google.com" (missing http// or https// before it), "ftp://example.com"
             // normalizedUrl ở đây sẽ là output do có included "out" trước var normalizedUrl
-            // Actuall logic behind "TryNormalizeHttpUrl() is":
-            // private static bool TryNormalizeHttpUrl(string? rawUrl, out string normalizedUrl)
-            // {
-            //      normalizedUrl = string.Empty;
-
-            //      if (string.IsNullOrWhiteSpace(rawUrl))
-            //      {
-            //          return false;
-            //      }
-
-            //      if (!Uri.TryCreate(rawUrl.Trim(), UriKind.Absolute, out var uri))
-            //      {
-            //            return false;
-            //      }
-
-            //      if (uri.Scheme != Uri.UriSchemeHttp && uri.Scheme != Uri.UriSchemeHttps)
-            //      {
-            //            return false;
-            //      }
-
-            //      normalizedUrl = uri.ToString();
-            //      return true;
-            // }
             if (!TryNormalizeHttpUrl(request.Url, out var normalizedUrl))
             {
                 return BadRequest("Url must be a valid absolute http or https URL.");
@@ -97,8 +94,7 @@ public class ShortenController : ControllerBase
             };
 
             // --- 3) Stage row in Entity Framework (not committed until SaveChanges) ---
-            _context.ShortUrls.Add(entity);
-            await _context.SaveChangesAsync();
+            await SaveShortUrlWithRetryAsync(entity);
 
             // --- 4) Map to response DTO (no AccessCount on normal response) ---
             var response = new ShortUrlResponse
@@ -223,10 +219,62 @@ public class ShortenController : ControllerBase
                 .ToArray());
             
             // Check if this code is present or not
+            // Table "ShortUrls" là một attribute của _context
             bool exists = _context.ShortUrls.Any(s => s.ShortCode == code);
             if (!exists)
                 return code;
         }
+    }
+
+    private async Task SaveShortUrlWithRetryAsync(ShortUrlStorage entity)
+    {
+        const int maxAttempts = 5;
+
+        for (var attempt = 1; attempt <= maxAttempts; attempt++)
+        {
+            _context.ShortUrls.Add(entity);
+
+            try
+            {
+                await _context.SaveChangesAsync();
+                return;
+            }
+            catch (DbUpdateException ex) when (IsUniqueShortCodeViolation(ex) && attempt < maxAttempts)
+            {
+                // After "SaveChangesAsync() fails due to Unique-ShortCode-Violation, Entity Framework still tracks this failed entity as a pending insertion
+                // Thus, we need to detach it from the current state of EF - which is assign for tracking this failed attempt.
+                // This will allow assigning a new code and the entity as a fresh attempt.
+                // Otherwise, EF's change tracker may retain state from failed save
+                // Nó tương tự như memory slot trong chơi game nhưng ko có khả năng overwrite nên ta cần delete nó để có thể lưu cái info mới vô nó
+                // By default, any code that cause change to the entity => EF tracks entity changes (state)
+                _context.Entry(entity).State = EntityState.Detached;
+                entity.ShortCode = GenerateUniqueShortCode();
+            }
+        }
+
+        throw new InvalidOperationException("Unable to generate a unique short code after multiple attempts.");
+    }
+
+    // Providing a Yes / No answer to the question: "Did SaveChangeAsync() failed because PostgreSQL rejected a duplicate value?"
+    // "Private" means the codes inside "ShortenController" can call this method but nowhere else
+    // "static" means this method does not use controller instance data, _context. It only examines the exception passed to it
+    // "DbUpdateException exception" - input parameter, EF Core will throws this if it cannot save a database change.
+    // "InnerException": EF Core sits between this application and Docker PostgreSQL => the exception can therefore have layers:
+    // - EF Core's exception = "DbUpdateException"
+    private static bool IsUniqueShortCodeViolation(DbUpdateException exception)
+    {
+        // exception.InnerException is the way to access the underlying error
+        // "exception.InnerException is PostgresException postgresException" - checks whether "InnerException" is a "PostgresException"
+        // If yes, stores it in a new variable called postgresException
+        // "postgresException.SqlState == PostgresErrorCodes.UniqueViolation" - PostgreSQL assigns standardized codes to errors and unique-contraint violation uses SQLSTATE == 23505 which can be written as ".UniqueViolation"
+        // The unique-constraint is a database rule states that "No 2 rows may have the same value in this column, or combination of columns"
+        // "ConstraintName" is an attribute can be use to identify the name of the database contraint
+        // Vì nếu trong tương lai, making Url unique thì nếu thiếu "ConstraintName" sẽ ko làm ta biết rõ nguyên nhân nào gây ra UniqueViolation vì duplicated shortCode và duplicated URL đều cho ra UniqueViolation
+        // "UniqueViolation" = identifies the category of error
+        // "ConstraintName" = identifies the specific database rule that failed
+        return exception.InnerException is PostgresException postgresException 
+        && postgresException.SqlState == PostgresErrorCodes.UniqueViolation 
+        && postgresException.ConstraintName == "IX_ShortUrls_ShortCode";
     }
 
     private static bool TryNormalizeHttpUrl(string? rawUrl, out string normalizedUrl)
