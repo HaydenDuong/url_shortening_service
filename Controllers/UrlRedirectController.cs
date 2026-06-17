@@ -28,8 +28,25 @@ public class RedirectController : ControllerBase
             return StatusCode(StatusCodes.Status500InternalServerError);
         }
 
-        entity.AccessCount += 1;
-        await _context.SaveChangesAsync();
+        // Old Approach
+        // entity.AccessCount += 1;
+        // entity.LastAccessedAt = DateTime.UtcNow;
+        // await _context.SaveChangesAsync();
+
+        // We already loaded the entity above so we can read/validate entity.Url for the redirect.
+        // Do not update AccessCount by doing:
+        //     entity.AccessCount += 1;
+        //     await _context.SaveChangesAsync();
+        // That read-modify-write pattern can lose clicks when two requests happen at the same time:
+        // both requests may read the same AccessCount value, increment it in C#, and save the same result.
+        // ExecuteUpdateAsync sends the increment to PostgreSQL instead:
+        //     AccessCount = AccessCount + 1
+        // PostgreSQL performs that update atomically, so concurrent redirects are less likely to overwrite each other's analytics updates.
+        await _context.ShortUrls
+            .Where(s => s.ShortCode == shortCode)
+            .ExecuteUpdateAsync(setters => setters
+                .SetProperty(s => s.AccessCount, s => s.AccessCount + 1)
+                .SetProperty(s => s.LastAccessedAt, s => DateTime.UtcNow));
 
         return Redirect(entity.Url);
     }

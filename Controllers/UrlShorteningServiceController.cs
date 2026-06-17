@@ -201,6 +201,7 @@ public class ShortenController : ControllerBase
             ShortCode = entity.ShortCode,
             CreatedAt = entity.CreatedAt,
             UpdatedAt = entity.UpdatedAt,
+            LastAccessedAt = entity.LastAccessedAt,
             AccessCount = entity.AccessCount
         };
 
