@@ -36,14 +36,17 @@ public class ShortenController : ControllerBase
     // Field holds the DB session for this request (Injected by Dependencies Injection)
     private readonly AppDbContext _context;
 
+    private readonly ILogger<ShortenController> _logger;
+
     // Constructor
     // ASP.NET sees "needs AppDbContext" -> Creates AppDbContext(options)
     // NOT called once at startup.
     // Called once PER HTTP request when ASP.NET creates this controller.
     // Each time, DI passes a NEW AppDbContext that connects to the same "UrlShortenerDB" store.
-    public ShortenController(AppDbContext context)
+    public ShortenController(AppDbContext context, ILogger<ShortenController> logger)
     {
         _context = context;
+        _logger = logger;
     }
 
     // Create a shorten URL for input URL via POST method
@@ -62,6 +65,10 @@ public class ShortenController : ControllerBase
             // Check if client sends a no JSON body request or malformed body that cannot be bound properly
             if (request is null)
             {
+                // Warning is used because the client sent something invalid/unusual, but the app handled it correctly.
+                _logger.LogWarning(
+                    "Create short URL failed because the request body was missing");
+
                 return BadRequest("Request body is required.");
             }
 
@@ -76,6 +83,9 @@ public class ShortenController : ControllerBase
             // normalizedUrl ở đây sẽ là output do có included "out" trước var normalizedUrl
             if (!TryNormalizeHttpUrl(request.Url, out var normalizedUrl))
             {
+                _logger.LogWarning(
+                    "Create short URL failed because input URL was invalid."
+                );
                 return BadRequest("Url must be a valid absolute http or https URL.");
             }
 
@@ -95,6 +105,12 @@ public class ShortenController : ControllerBase
 
             // --- 3) Stage row in Entity Framework (not committed until SaveChanges) ---
             await SaveShortUrlWithRetryAsync(entity);
+            
+            // --- 3.5) Log the successful creation ---
+            // Useful here because it tells developers that a business event happened and ShortCode is safe enough to search by later.
+            _logger.LogInformation(
+                "Short URL created. ShortCode: {ShortCode}", entity.ShortCode
+            );
 
             // --- 4) Map to response DTO (no AccessCount on normal response) ---
             var response = new ShortUrlResponse
@@ -118,7 +134,14 @@ public class ShortenController : ControllerBase
         // shortCode comes from URL - "abc123", not from JSON body
         var entity = await _context.ShortUrls.FirstOrDefaultAsync(s => s.ShortCode == shortCode);
 
-        if (entity is null) return NotFound(); // 404 - Not Found
+        if (entity is null)
+        {
+            _logger.LogWarning(
+                "Get short URL failed because short code was not found. ShortCode: {ShortCode}", shortCode
+            );
+
+            return NotFound(); // 404 - Not Found
+        } 
 
         var response = new ShortUrlResponse
         {
@@ -140,23 +163,42 @@ public class ShortenController : ControllerBase
     {
         if (request is null)
         {
+            _logger.LogWarning(
+                "Update short URL failed because the request body was mising. ShortCode: {ShortCode}", shortCode
+            );
+
             return BadRequest("Request body is required.");
         }
 
         if (!TryNormalizeHttpUrl(request.Url, out var normalizedUrl))
         {
+            _logger.LogWarning(
+                "Update short URL failed because input URL was invalid. ShortCode: {ShortCode}", shortCode
+            );
+
             return BadRequest("Url must be a valid absolute http or https URL.");
         }
 
         // check if the shortCode from URL is legit or not
         var entity = await _context.ShortUrls.FirstOrDefaultAsync(s => s.ShortCode == shortCode);
 
-        if (entity is null) return NotFound();
+        if (entity is null) 
+        {
+            _logger.LogWarning(
+                "Update short URL failed because short code was not found. ShortCode: {ShortCode}", shortCode
+            );
+
+            return NotFound();
+        }
 
         entity.Url = normalizedUrl;
         entity.UpdatedAt = DateTime.UtcNow;
 
         await _context.SaveChangesAsync();
+
+        _logger.LogInformation(
+            "Short URL updated. ShortCode: {ShortCode}", entity.ShortCode
+        );
 
         // Create a new Response to return back to UI
         var response = new ShortUrlResponse
@@ -178,10 +220,21 @@ public class ShortenController : ControllerBase
     {
         var entity = await _context.ShortUrls.FirstOrDefaultAsync(s => s.ShortCode == shortCode);
 
-        if (entity is null) return NotFound();
+        if (entity is null) 
+        {
+            _logger.LogWarning(
+                "Delete short URL failed because short code was not found. ShortCode: {ShortCode}", shortCode
+            );
+
+            return NotFound();
+        }
 
         _context.ShortUrls.Remove(entity);
         await _context.SaveChangesAsync();
+
+        _logger.LogInformation(
+            "Short URL deleted. ShortCode: {ShortCode}", shortCode
+        );
 
         return NoContent(); //204 - No Content, empty body
     }
@@ -192,7 +245,14 @@ public class ShortenController : ControllerBase
     {
         var entity = await _context.ShortUrls.FirstOrDefaultAsync(s => s.ShortCode == shortCode);
 
-        if (entity is null) return NotFound();
+        if (entity is null) 
+        {
+            _logger.LogWarning(
+                "Get short URL stats failed because short code was not found. ShortCode: {ShortCode}", shortCode
+            );
+
+            return NotFound();
+        }
 
         var response = new ShortUrlResponseStats
         {

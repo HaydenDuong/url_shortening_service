@@ -47,4 +47,4 @@ GET {{url_shortening_service_HostAddress}}/shorten/arlbot/stats
 Accept: application/json
 
 ### Redirect Logic Testing
-GET {{url_shortening_service_HostAddress}}/go/lOVa4J
+GET {{url_shortening_service_HostAddress}}/go/ePcTc8

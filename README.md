@@ -41,7 +41,8 @@
 - Adding validation logic to both: "UrlShorteningServiceController.cs" (HttpPOST & HttpPUT) & "ShortUrlCreateUpdate.cs" (Adding [Required] & [Url])
 - Adding collision handling for race condition methods in "UrlShorteningServiceController.cs" (HttpPOST)
 
-## Stage 3 - Analytics and Concurrency, Structured Loggin, Dockerize the API
+## Stage 3 - Analytics and Concurrency, Structured Logging, Dockerize the API
+### A - Analytics and Concurrency
 - Add basic analytics fields:
     - "AccessCount" = how many times the short URL has been used for redirect.
     - "LastAccessedAt" = the last time the short URL was successfully used.
@@ -59,9 +60,46 @@
     - Request B also reads 10.
     - Both requests add 1 and save 11.
     - The final value becomes 11, but the correct value should be 12.
-- The improved approach uses "ExecuteUpdateAsync" to send the increment directly to PostgreSQL and take effect immediately at the point in which they are invoked => Thus, somewhat preventing lost update from happening:
+- The improved approach uses "ExecuteUpdateAsync" to send the increment directly to PostgreSQL and take effect immediately at the point in which it is invoked. This helps prevent lost updates from happening:
     - "AccessCount = AccessCount + 1"
 - This is safer because PostgreSQL updates the counter atomically inside the database, instead of C# reading an old value and writing back a possibly outdated result.
+
+### B - Logging
+- In "appsettings.json": 
+    ```json
+    "Logging": {
+        "LogLevel": {
+            "Default": "Information",
+            "Microsoft.AspNetCore": "Warning"
+        }
+    }
+    ```
+- This means:
+    - "Default" = minimum log level for most application logs. The "_logger" calls in both controller files fall under this category.
+    - "Default": "Information" = app will show: Information, Warning, Error, and Critical. 
+        - But not: Debug & Trace
+    - "Microsoft.AspNetCore" = minimum log level for ASP.NET Core framework logs. This only shows Warning and above, which keeps the terminal from being flooded with framework noise.
+    - The order of seriousness is as:
+        - Trace
+        - Debug
+        - Information
+        - Warning
+        - Error
+        - Critical
+
+### Note - Structured Logging and Sensitive Data
+- Prefer structured logging instead of string concatenation:
+    - Good: "_logger.LogInformation(\"Short URL created. ShortCode: {ShortCode}\", shortCode);"
+    - Avoid: "_logger.LogInformation(\"Short URL created: \" + shortCode);"
+- Structured logging keeps the message readable and lets log systems search/filter by fields like "ShortCode".
+- Avoid logging full destination URLs unless there is a very specific reason.
+- Full URLs can contain sensitive data such as:
+    - password reset tokens
+    - email addresses
+    - API keys
+    - session IDs
+    - private query string values
+- Safer default: log the "ShortCode" and the event outcome, but not the full "Url".
 
 ## Stage 4 - Redis Cache, RabbitMQ Analytics, Rate Limiting & Cleanup Factor
 

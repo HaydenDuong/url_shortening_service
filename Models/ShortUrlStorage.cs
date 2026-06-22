@@ -3,8 +3,11 @@ namespace url_shortening_service.Models;
 public class ShortUrlStorage
 {
     public int Id { get; set; }
-    public string Url { get; set; }
-    public string ShortCode { get; set; }
+    
+    // Using required instead of the followings are fine
+    // Just that the following is more beginner-friendly EF option
+    public string Url { get; set; } = string.Empty;
+    public string ShortCode { get; set; } = string.Empty;
     public DateTime CreatedAt { get; set; }
     public DateTime UpdatedAt { get; set; }
     public DateTime? LastAccessedAt { get; set; }
