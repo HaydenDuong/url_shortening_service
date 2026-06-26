@@ -41,7 +41,7 @@
 - Adding validation logic to both: "UrlShorteningServiceController.cs" (HttpPOST & HttpPUT) & "ShortUrlCreateUpdate.cs" (Adding [Required] & [Url])
 - Adding collision handling for race condition methods in "UrlShorteningServiceController.cs" (HttpPOST)
 
-## Stage 3 - Analytics and Concurrency, Structured Logging, Dockerize the API
+## Stage 3 - Analytics and Concurrency, Structured Logging, Dockerize the API (Analytics -> Logging -> Dockerfile -> Compose Networking -> Environment Config)
 ### A - Analytics and Concurrency
 - Add basic analytics fields:
     - "AccessCount" = how many times the short URL has been used for redirect.
@@ -100,6 +100,70 @@
     - session IDs
     - private query string values
 - Safer default: log the "ShortCode" and the event outcome, but not the full "Url".
+
+### C - Dockerize the API (Build the ASP.NET Core API into a Docker image and run it as a container)
+- Before this stage, the current app is running locally and the machine provides:
+    - .NET SDK
+    - NuGet packages
+    - source code
+    - dotnet run
+- After this stage, a Docker image packages this app with the runtime it needs:
+    - compiled app
+    - ASP.NET runtime
+    - startup command
+    - container port
+
+- Important Concept: SDK Image vs Runtime Image
+    - Build Phase, has compiler and build tools:
+        - Uses SDK image: "mcr.microsoft.com/dotnet/sdk"
+        - This image can:
+            - restore packages
+            - build code
+            - publish app
+        - Quite big
+    - Runtime Phase, has only enough .NET runtim to execute the compiled DLL:
+        - Use ASP.NET runtime image: "mcr.microsoft.com/dotnet/aspnet"
+        - This image can:
+            - run the already-built app
+        - Smaller and closer to production practice
+    - Thus, this is known as multi-stage builds where:
+        - Build with SDK.
+        - Run with runtime only
+
+- Steps:
+    - 1. Create .dockerignore
+    - 2. Create Dockerfile
+    - 3. Build the API image
+    - 4. Run the API container
+
+- Common Production-Level Dockerfile pattern, these steps will makes rebuild faster since Docker Image builds in cached layers:
+    - Copy project file (".csproj") first   (If the file does not change afterward, Docker can reuse the restored packages layer aka the OG layer of this step)
+    - Restore dependencies
+    - Copy source code
+    - Build / publish
+
+- Port Consideration:
+    - Before this stage:
+        - This app runs with "dotnet run" which based on /Properties/launchSettings.json:
+            - The server is listening on both ports 5184 & 7278
+        - However, when placing this application within a Docker container, that file is not the main thing controlling production-style startup.
+        - Thus, we should explicitly tell ASP.NET Core what port to listen on inside the container
+    - After this stage:
+        - Move local machine port 5184 to the generated Docker container's HTTP port 8080
+
+- Afterward, start building the container image by:
+    - 1. "docker build -t url-shortener-api:stage3c ." in the root folder where Dockerfile for this image is located
+    - 2. Check if the image is created / existing by: "docker images"
+    - 3. "docker run --rm -p 5184:8080 --name url-shortener-api url-shortener-api:stage3c"
+    - Where:
+        - --rm = remove the container after it stops.
+        - -p 5184:8080 = your machine port 5184 mapping -> container port 8080
+        - --name url-shortener-api = give the running container a friendly name
+        - url-shortener-api:stage3c = name of the image to build the container
+    - 4. Test the app inside the created container: "http://localhost:5184/shorten/someCode"
+    
+### D - Docker Compose API + PostgresSQL together
+### E - Environment Variables / Production-sty;e Configuration
 
 ## Stage 4 - Redis Cache, RabbitMQ Analytics, Rate Limiting & Cleanup Factor
 

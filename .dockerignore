@@ -1,0 +1,14 @@
+# files and folders that should not be in the API container
+# Because: Docker builds an image, it sends this project folder as the build context
+# Thus, the following should be exempted as these will slow down the building image process and may accidentally copy unnecessary files into this image:
+#   Compiled output
+#   Temporary build files
+#   Git history
+#   IDE files
+bin/
+obj/
+.git/
+.vs/
+Docker/
+*.user
+*.suo
