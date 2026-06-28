@@ -68,11 +68,10 @@ WORKDIR /app
 # Copy them into the final runtime image's /app folder (stated in WORKDIR /app) instead from /src
 COPY --from=build /app/publish .
 
-# Since we are moving the application into a Docker container, the original ports stated in /Properties/launchSettings.json will no longer work for container scenario
-# Thus, these following commands tell Docker to:
-#   Listen for HTTP traffic on port 8080 inside the created container
-#   "+" = accept connections from any network interface inside the container
-ENV ASPNETCORE_URLS=http://+:8080
+# Since we are moving the application into a Docker container, the original ports stated in /Properties/launchSettings.json will no longer control this container scenario.
+# This tells ASP.NET Core to listen for HTTP traffic on port 8080 inside the created container.
+# ENV ASPNETCORE_URLS=http://+:8080 - still possible but the the below is more suitable for the newer .NET container style.
+ENV ASPNETCORE_HTTP_PORTS=8080
 
 # This is not yet "exposing", just a metadata for documents the container port
 # This line is more of: "This app is expected to listen on port 8080"

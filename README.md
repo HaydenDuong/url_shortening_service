@@ -163,10 +163,23 @@
     - 4. Test the app inside the created container: "http://localhost:5184/shorten/someCode"
     
 ### D - Docker Compose API + PostgresSQL together
-### E - Environment Variables / Production-sty;e Configuration
+    - Check Comments:
+        - Dockerfile.
+        - Program.cs regard HTTPS redirect.
+        - Docker/docker-compose.yml on "api" service 
+
+### E - Environment Variables / Production-style Configuration
 
 ## Stage 4 - Redis Cache, RabbitMQ Analytics, Rate Limiting & Cleanup Factor
 
 # Testing:
 - Run the docker: "docker compose -f Docker/docker-compose.yml up -d" or "docker compose up -d" within the Docker folder.
+- Or "docker compose -f Docker/docker-compose.yml up --build":
+    - docker compose = run services defined in a compose file
+    - -f Docker/docker-compose.yml = use this compose file
+    - up = create / start the services
+    - --build = Before starting containers, build the image for services that have a build section
+    - If not including that, Docker Compose may use an existing image / container from an earlier build which may not right
+    - Thus, "--build" = rebuilds the images first to make sure these included the latest changes.
+    - -d = detached / background mode => Run in the background if included else it will run in the foreground and show logs live
 - dotnet run from the Root folder.

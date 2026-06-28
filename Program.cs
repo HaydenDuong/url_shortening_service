@@ -38,7 +38,20 @@ if (app.Environment.IsDevelopment())
     app.MapOpenApi();
 }
 
-app.UseHttpsRedirection();
+// When running inside Docker, skip HTTPS redirection for now
+// Else, keep HTTPS redirection when running normally on local machine instead of Docker
+// .NET containers automatically set "DOTNET_RUNNING_IN_CONTAINER=true" 
+// In production, HTTPS us often handled by something in front of the app:
+//      Reverse Proxy
+//      Load Balancer
+//      API Gateway
+//      Nginx
+//      Cloud Service
+// The app container often receives plains HTTP internally, while HTTPS is handled at the edge
+if (!builder.Configuration.GetValue<bool>("DOTNET_RUNNING_IN_CONTAINER"))
+{
+    app.UseHttpsRedirection();
+}
 
 app.UseAuthorization();
 
