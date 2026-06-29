@@ -27,6 +27,10 @@ builder.Services.AddOpenApi();
 // builder.Services.AddDbContext<AppDbContext>(options => options.UseInMemoryDatabase("UrlShortenerDB"));
 
 // Using PostgreSQL instead of RAM
+// "builder.Configuration.GetConnectionString("Postgres")" = Asks ASP.NET Core to give the final value of ConnectionString:Postgres after all config sources are combined
+// Locally, the final value comes from: "appsettings.json"
+// In Docker Compose, the final value comes from: "Docker/docker-compose.yml - ConnectionStrings__Postgres"
+// As result, this latter (environment variables) override JSON config
 builder.Services.AddDbContext<AppDbContext>(options => options.UseNpgsql(builder.Configuration.GetConnectionString("Postgres")));
 
 

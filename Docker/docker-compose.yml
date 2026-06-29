@@ -18,11 +18,11 @@ services:
     # Tools like pgAdmin, DBeaver, or psql connecting to localhost:5434 would stop working
     # Except: "docker exec -it ..." because this command enters the container directly.
     ports:
-      - "5434:5432"
+      - "${POSTGRES_HOST_PORT}:${POSTGRES_CONTAINER_PORT}"
     environment:
-      POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: postgres
-      POSTGRES_DB: UrlShortenerDB
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB}
     volumes:
       - pgdata:/var/lib/postgresql/data
   
@@ -36,13 +36,13 @@ services:
       dockerfile: Dockerfile
     container_name: urlshortener_webapp_API
     ports:
-      - "5184:8080"
+      - "${API_HOST_PORT}:${API_CONTAINER_PORT}"
     environment:
       # Npgsql came from PostgreSQL driver - This application is using this to connect to PostgreSQL
       # When Npgsql starts a connection, it may check whether a security feature called GSS/Kerberos is available or not
       # This security feature is used in some corporate / enterprise authentication setups.
       # The current Docker PostgreSQL container does not have the Linux library for that feature: "libgssapi_krb5.so.2"
-      ConnectionStrings__Postgres: "Host=db;Port=5432;Database=UrlShortenerDB;Username=postgres;Password=postgres;GSS Encryption Mode=Disable"
+      ConnectionStrings__Postgres: "Host=db;Port=${POSTGRES_CONTAINER_PORT};Database=${POSTGRES_DB};Username=${POSTGRES_USER};Password=${POSTGRES_PASSWORD};GSS Encryption Mode=Disable"
     
     # this tell Docker Compose to: "Start db before api"
     depends_on:

@@ -162,18 +162,109 @@
         - url-shortener-api:stage3c = name of the image to build the container
     - 4. Test the app inside the created container: "http://localhost:5184/shorten/someCode"
     
-### D - Docker Compose API + PostgresSQL together
-    - Check Comments:
-        - Dockerfile.
-        - Program.cs regard HTTPS redirect.
-        - Docker/docker-compose.yml on "api" service 
+### D - Docker Compose API + PostgreSQL together
+- Goal:
+    - Run the API container and PostgreSQL container together as one Docker Compose project.
+    - The API should connect to PostgreSQL through Docker Compose networking.
+- Before this stage:
+    - PostgreSQL was running in Docker.
+    - The API was usually running from the local machine with "dotnet run".
+    - Local machine used "localhost:5434" to reach PostgreSQL.
+- After this stage:
+    - Both "api" and "db" run as containers in the same Compose project.
+    - Compose creates a shared internal network for these services.
+    - The API reaches PostgreSQL with "Host=db;Port=5432".
+- Important Docker networking concept:
+    - "localhost" depends on where the code is running.
+    - From the local laptop:
+        - "localhost:5434" means laptop port 5434, mapped to the PostgreSQL container.
+    - From inside the API container:
+        - "localhost" means the API container itself.
+        - It does not mean the laptop.
+        - It does not mean the PostgreSQL container.
+    - From inside the API container, use the Compose service name:
+        - "db:5432"
+- Port mapping:
+    - "5434:5432" means:
+        - laptop port 5434 -> PostgreSQL container port 5432
+    - "5184:8080" means:
+        - laptop port 5184 -> API container port 8080
+    - Container-to-container communication does not use the laptop port.
+    - API container talks to DB container using "db:5432", not "localhost:5434".
+- Environment override:
+    - The API code still calls:
+        - "builder.Configuration.GetConnectionString(\"Postgres\")"
+    - In local development, this value can come from "appsettings.json".
+    - In Docker Compose, "ConnectionStrings__Postgres" overrides the value.
+    - Double underscore "__" represents nested configuration:
+        - "ConnectionStrings__Postgres" = "ConnectionStrings:Postgres"
+- "depends_on":
+    - "depends_on: db" tells Compose to start the database container before the API container.
+    - It does not fully guarantee PostgreSQL is ready to accept connections.
+    - For this learning project, it is acceptable.
+    - Later, production-style systems may use health checks and retry logic.
+- Check Comments:
+    - Dockerfile.
+    - Program.cs regarding HTTPS redirect.
+    - Docker/docker-compose.yml on "api" service.
 
 ### E - Environment Variables / Production-style Configuration
+- Concepts:
+    - Code should not need to change when environment changes.
+    - Configuration should change instead
+- In real backend projects, it is important to separate these followings:
+    - Code = app behavior and logic.
+    - Config = database host, ports, logging level, environment name.
+    - Secrets = passwords, API keys, tokens.
+- Before this Stage:
+    - "Postgres" connection string is placed within "appsettings.json"
+- After this Stage:
+    - 1. Introducte ".env" for Docker Compose values.
+    - 2. Update Docker Compose file to use variables from ".env" (step above)
+- Configuration sources used in this project:
+    - "appsettings.json":
+        - Default local configuration.
+        - Useful when running the API directly with "dotnet run".
+    - ".env":
+        - Local Docker Compose values for this machine.
+        - Ignored by Git because it may contain secrets or machine-specific values.
+    - ".env.example":
+        - Safe template for other developers.
+        - Should include the required variable names.
+        - Secret values should use placeholders such as "change_me".
+    - Docker Compose "environment":
+        - Passes environment variables into containers.
+        - Can override values from "appsettings.json".
+- Why ".env" is ignored:
+    - It may contain passwords, API keys, tokens, or local-only ports.
+    - Each developer or environment may need different values.
+    - The project should commit ".env.example" instead, so others know which variables are required.
+- Why the Compose connection string is built from variables:
+    - The "db" service and "api" service share the same source values:
+        - POSTGRES_USER
+        - POSTGRES_PASSWORD
+        - POSTGRES_DB
+    - This avoids mismatches where PostgreSQL creates one database but the API tries to connect to another.
+    - For local Compose, building the connection string from parts is clear and useful.
+    - In cloud/production environments, using one full secret connection string is also common.
+- Important port distinction:
+    - POSTGRES_HOST_PORT:
+        - Used by the laptop to reach PostgreSQL.
+        - Example: localhost:5434
+    - POSTGRES_CONTAINER_PORT:
+        - Used by containers inside the Compose network.
+        - Example: db:5432
+    - The API connection string should use POSTGRES_CONTAINER_PORT because API -> DB is container-to-container traffic.
 
 ## Stage 4 - Redis Cache, RabbitMQ Analytics, Rate Limiting & Cleanup Factor
+## A - Redis caching for redirects
+## B - Cache invalidation on update / delete
+## C - Rate Limiting
+## D - Cleanup / expiring URLS
+## E - RabbitMQ async analytics
 
 # Testing:
-- Run the docker: "docker compose -f Docker/docker-compose.yml up -d" or "docker compose up -d" within the Docker folder.
+- Before Stage 3E, Run the docker: "docker compose -f Docker/docker-compose.yml up -d" or "docker compose up -d" within the Docker folder.
 - Or "docker compose -f Docker/docker-compose.yml up --build":
     - docker compose = run services defined in a compose file
     - -f Docker/docker-compose.yml = use this compose file
@@ -183,3 +274,51 @@
     - Thus, "--build" = rebuilds the images first to make sure these included the latest changes.
     - -d = detached / background mode => Run in the background if included else it will run in the foreground and show logs live
 - dotnet run from the Root folder.
+- After Stage 3E, Run this command at project root:
+    "docker compose --env-file .env -f Docker/docker-compose.yml config" = Safe check, as "config" prints the final resolved Compose configuration after variables are substituted
+    - Output as followings:
+            name: url-shortener-project
+                services:
+                api:
+                    build:
+                    context: C:\Users\Hayden Duong\Desktop\learning_projects\url_shortening_service
+                    dockerfile: Dockerfile
+                    container_name: urlshortener_webapp_API
+                    depends_on:
+                    db:
+                        condition: service_started
+                        required: true
+                    environment:
+                    ConnectionStrings__Postgres: Host=db;Port=5432;Database=UrlShortenerDB;Username=postgres;Password=postgres;GSS Encryption Mode=Disable
+                    networks:
+                    default: null
+                    ports:
+                    - mode: ingress
+                        target: 8080
+                        published: "5184"
+                        protocol: tcp
+                db:
+                    container_name: urlshortener_webapp_DB
+                    environment:
+                    POSTGRES_DB: UrlShortenerDB
+                    POSTGRES_PASSWORD: postgres
+                    POSTGRES_USER: postgres
+                    image: postgres:16
+                    networks:
+                    default: null
+                    ports:
+                    - mode: ingress
+                        target: 5432
+                        published: "5434"
+                        protocol: tcp
+                    volumes:
+                    - type: volume
+                        source: pgdata
+                        target: /var/lib/postgresql/data
+                        volume: {}
+                networks:
+                default:
+                    name: url-shortener-project_default
+                volumes:
+                pgdata:
+                    name: url-shortener-project_pgdata

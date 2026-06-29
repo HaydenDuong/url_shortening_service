@@ -13,4 +13,6 @@ Thumbs.db
 .DS_Store
 
 # Local secrets
+.env
+
 # secret.json
