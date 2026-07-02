@@ -11,6 +11,10 @@
 #   3. Let API reach DB over internal Docker network.
 name: url-shortener-project
 services:
+  redis:
+    image: redis:7-alpine
+    container_name: urlshortener_webapp_Redis
+
   db:
     image: postgres:16
     container_name: urlshortener_webapp_DB
@@ -43,9 +47,11 @@ services:
       # This security feature is used in some corporate / enterprise authentication setups.
       # The current Docker PostgreSQL container does not have the Linux library for that feature: "libgssapi_krb5.so.2"
       ConnectionStrings__Postgres: "Host=db;Port=${POSTGRES_CONTAINER_PORT};Database=${POSTGRES_DB};Username=${POSTGRES_USER};Password=${POSTGRES_PASSWORD};GSS Encryption Mode=Disable"
+      ConnectionStrings__Redis: "${REDIS_CONNECTION_STRING}"
     
     # this tell Docker Compose to: "Start db before api"
     depends_on:
+      - redis
       - db
 
 volumes:

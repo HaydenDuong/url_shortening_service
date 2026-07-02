@@ -258,6 +258,62 @@
 
 ## Stage 4 - Redis Cache, RabbitMQ Analytics, Rate Limiting & Cleanup Factor
 ## A - Redis caching for redirects
+- Before this stage: 
+    GET /go/{shortCode} -> Query PostgreSQL
+                        -> Update analytics
+                        -> Redirect based on the retrieved URL
+- After this stage:
+    GET /go/{shortCode} -> Check Redis first
+                        -> If found: use cached URL, else: Query PostgreSQL
+                        -> Store URL in Redis
+                        -> Redirect based on this storaged URL
+- PostgreSQL = this application's source of truth   (permanent truth)
+- Redis = a fast temporary memory store             (Fast shortcut)
+- Thus, if Redis loses data, the application still work because PostgreSQL still holding the real data.
+- Cache hit:
+    - Redis already has the destination URL for the short code.
+    - The app can skip the PostgreSQL SELECT for the redirect URL.
+    - Analytics are still updated in PostgreSQL.
+- Cache miss:
+    - Redis does not have the destination URL.
+    - The app reads from PostgreSQL, then stores the URL in Redis for next time.
+- TTL (Time To Live):
+    - Cached redirect URLs are stored with an expiration time.
+    - In this project, the cached URL lives for 10 minutes.
+    - TTL is a safety net so stale data does not live forever.
+- Important limitation:
+    - Stage 4A does not yet handle cache invalidation when a URL is updated or deleted.
+    - That is why Stage 4B exists.
+    - Without invalidation, Redis may temporarily return an old URL until the TTL expires.
+
+- Step-by-step taken for this Stage:
+    1. Add Redis service to Docker Compose.
+    2. Add Redis config to ".env" and ".env.example"
+    3. Add Redis package to ASP.NET Core    = "dotnet add package Microsoft.Extensions.Caching.StackExchangeRedis"
+        - This package will gives:
+            - AddStackExchangeRedisCache(...)
+            - IDistributedCache backed by Redis = This let this application use a cache without the "controller" file need to know all Redis detail.
+                - "Controller" will depend on cache abstraction, not Redis client details.
+                - Later, implementation can change more easily.
+    4. Register Redis cache in "Program.cs"
+    5. Inject cache into "RedirectController"
+    6. Implement cache miss path.
+    7. Implement cache hit path.
+    8. Add logs for cache hit / miss.
+    9. Test redirects twice and observe logs
+
+- Access Redis Container on Docker by = "docker exec -it urlshortener_webapp_Redis redis-cli" & "KEYS *" - to check to stored key & "TTL value" to check time to live remaining of that key; "exit" to exit Redis container
+    - In this project, because of using IDistributedCache => the value of the stored key will be stored as a hash with metadata (expiration time) and to access it, following these steps:
+        127.0.0.1:6379> TYPE shorturl:ePcTc8
+                        hash
+        127.0.0.1:6379> HGETALL shorturl:ePcTc8
+                        1) "absexp"
+                        2) "639185764275311177"
+                        3) "sldexp"
+                        4) "-1"
+                        5) "data"
+                        6) "https://www.google.com/"
+
 ## B - Cache invalidation on update / delete
 ## C - Rate Limiting
 ## D - Cleanup / expiring URLS
@@ -322,3 +378,7 @@
                 volumes:
                 pgdata:
                     name: url-shortener-project_pgdata
+
+# Remember:
+- API is public to laptop / browser.
+- PostgreSQL & Redis are internal services. => Redis can be reachable by the API container, but not exposed directly to local laptop.

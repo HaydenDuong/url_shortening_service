@@ -19,6 +19,19 @@ builder.Services.AddControllers();
 // Learn more about configuring OpenAPI at https://aka.ms/aspnet/openapi
 builder.Services.AddOpenApi();
 
+// Register IDistributedCache
+// Use Redis as the implementation
+// Get Redis connection string from configuration
+// What these truly mean:
+//      When something asks for IDistributeCache,
+//      Use Redis, and connect to Redis-container on Docker through ConnectionStrings:Redis:
+//          - Local = come from "appsetting.json"
+//          - Docker container = come from Docker/docker-compose.yml 
+builder.Services.AddStackExchangeRedisCache(options =>
+{
+   options.Configuration = builder.Configuration.GetConnectionString("Redis"); 
+});
+
 // Tell DI: "When someone needs AppDbContext, build it like this."
 
 // UseInMemoryDatabase = fake DB in RAM (data gone when app stops — fine for learning).
@@ -31,7 +44,12 @@ builder.Services.AddOpenApi();
 // Locally, the final value comes from: "appsettings.json"
 // In Docker Compose, the final value comes from: "Docker/docker-compose.yml - ConnectionStrings__Postgres"
 // As result, this latter (environment variables) override JSON config
-builder.Services.AddDbContext<AppDbContext>(options => options.UseNpgsql(builder.Configuration.GetConnectionString("Postgres")));
+// Nghĩa là nếu chạy locally trên máy tính mà ko thông qua API container trên Docker thì app sẽ kết nối với DB-container trên Docker thông qua giá trị được lưu trong appsetting.json
+// Còn cái app trong API container trên Docker, thì sẽ dùng giá trị trong Docker/docker-compose.yml
+builder.Services.AddDbContext<AppDbContext>(options => 
+{
+    options.UseNpgsql(builder.Configuration.GetConnectionString("Postgres"));
+});
 
 
 var app = builder.Build();

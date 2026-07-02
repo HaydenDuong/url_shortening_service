@@ -1,6 +1,7 @@
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using url_shortening_service.Data;
+using Microsoft.Extensions.Caching.Distributed;
 
 namespace url_shortening_service.Controllers;
 
@@ -11,47 +12,99 @@ public class RedirectController : ControllerBase
     private readonly AppDbContext _context;
     // Added a logger field to inject into the constructor
     private readonly ILogger<RedirectController> _logger;
+    private readonly IDistributedCache _cache;
 
-    public RedirectController(AppDbContext context, ILogger<RedirectController> logger)
+    public RedirectController(
+        AppDbContext context, 
+        ILogger<RedirectController> logger,
+        IDistributedCache cache)
     {
         _context = context;
 
         // Injected into the constructor just like AppDbContext
         _logger = logger;
+
+        _cache = cache;
     }
 
     [HttpGet("{shortCode}")]
     public async Task<IActionResult> RedirectToStoredURL(string shortCode)
     {
-        var entity = await _context.ShortUrls.FirstOrDefaultAsync(s => s.ShortCode == shortCode);
+        string redirectUrl;
 
-        // Warning is being used here instead of Error, because:
-        // Warning = unusual / suspicious, but the app still handled it.
-        // While Error = the app failed to do something it was expected to do.
-        // In this case, a missing short code won't stop / halt the running app:
-        // 1. User typed it wrong.
-        // 2. Old link.
-        // 3. Bot Scanning random short codes
-        // 4. Someone is probing this application's service
-        if (entity is null) 
+        // Declare Cache-Key to be used by Redis
+        var cacheKey = $"shorturl:{shortCode}";
+
+        // This variable will contain:
+        // If that shortCode is cached => cachedUrl will stored the destination URL
+        // If not, then it will storing "null"
+        var cachedUrl = await _cache.GetStringAsync(cacheKey);
+
+        // If "cachedUrl" is not Null or WhiteSpace => string.IsNullOrWhiteSpace(cachedUrl) = False => !string.... = True
+        // cachedUrl can be:
+        //      null
+        //      ""
+        //      " "
+        //      real URL
+        // Thus using "string." is to make sure that "cachedUrl" is real url => valid cache hit 
+        if (!string.IsNullOrWhiteSpace(cachedUrl))
         {
-            _logger.LogWarning(
-                "Redirect failed because the input short code was not found. ShortCode: {ShortCode}", shortCode
+            _logger.LogInformation(
+                "Short URL cache hit. ShortCode: {ShortCode}", shortCode
             );
 
-            return NotFound();
+            redirectUrl = cachedUrl;
         }
-        
-        // A Logic Check to make sure if the retrieved URL from database is not broken (null or whitespace)
-        // This should be used with Error for Logging, because:
-        // If the row exists but "Url" is empty, this means that this application system has bad stored data.
-        // The user did not make a bad request, but the server found an invalid internal state
-        if (string.IsNullOrWhiteSpace(entity.Url))
+        else
         {
-            _logger.LogError(
-                "Redirect failed because stored Url was empty. ShortCode: {ShortCode}", shortCode
+            _logger.LogInformation(
+                "Short URL cache miss. ShortCode: {ShortCode}", shortCode
             );
-            return StatusCode(StatusCodes.Status500InternalServerError);
+
+            var entity = await _context.ShortUrls.FirstOrDefaultAsync(s => s.ShortCode == shortCode);
+
+            // Warning is being used here instead of Error, because:
+            // Warning = unusual / suspicious, but the app still handled it.
+            // While Error = the app failed to do something it was expected to do.
+            // In this case, a missing short code won't stop / halt the running app:
+            // 1. User typed it wrong.
+            // 2. Old link.
+            // 3. Bot Scanning random short codes
+            // 4. Someone is probing this application's service
+            if (entity is null) 
+            {
+                _logger.LogWarning(
+                    "Redirect failed because the input short code was not found. ShortCode: {ShortCode}", shortCode
+                );
+
+                return NotFound();
+            }
+        
+            // A Logic Check to make sure if the retrieved URL from database is not broken (null or whitespace)
+            // This should be used with Error for Logging, because:
+            // If the row exists but "Url" is empty, this means that this application system has bad stored data.
+            // The user did not make a bad request, but the server found an invalid internal state
+            if (string.IsNullOrWhiteSpace(entity.Url))
+            {
+                _logger.LogError(
+                    "Redirect failed because stored Url was empty. ShortCode: {ShortCode}", shortCode
+                );
+                return StatusCode(StatusCodes.Status500InternalServerError);
+            }
+
+            redirectUrl = entity.Url;
+            await _cache.SetStringAsync(
+                cacheKey,
+                redirectUrl,
+                new DistributedCacheEntryOptions
+                {
+                    AbsoluteExpirationRelativeToNow = TimeSpan.FromMinutes(10)
+                }
+            );
+            
+            _logger.LogInformation(
+                "Short URL cached. ShortCode: {ShortCode}", shortCode
+            );
         }
 
         // Old Approach
@@ -78,7 +131,7 @@ public class RedirectController : ControllerBase
             "Short URL redirect succeeded. ShortCode: {ShortCode}", shortCode
         );
         
-        return Redirect(entity.Url);
+        return Redirect(redirectUrl);
     }
 }
 
