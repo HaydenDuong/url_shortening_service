@@ -22,6 +22,7 @@ using Microsoft.EntityFrameworkCore;
 using Npgsql;
 using url_shortening_service.Data;
 using url_shortening_service.Models;
+using Microsoft.Extensions.Caching.Distributed;
 
 namespace url_shortening_service.Controllers;
 
@@ -38,15 +39,18 @@ public class ShortenController : ControllerBase
 
     private readonly ILogger<ShortenController> _logger;
 
+    private readonly IDistributedCache _cache;
+
     // Constructor
     // ASP.NET sees "needs AppDbContext" -> Creates AppDbContext(options)
     // NOT called once at startup.
     // Called once PER HTTP request when ASP.NET creates this controller.
     // Each time, DI passes a NEW AppDbContext that connects to the same "UrlShortenerDB" store.
-    public ShortenController(AppDbContext context, ILogger<ShortenController> logger)
+    public ShortenController(AppDbContext context, ILogger<ShortenController> logger, IDistributedCache cache)
     {
         _context = context;
         _logger = logger;
+        _cache = cache;
     }
 
     // Create a shorten URL for input URL via POST method
@@ -196,6 +200,15 @@ public class ShortenController : ControllerBase
 
         await _context.SaveChangesAsync();
 
+        // Cache removal after new url is updated and saved successfully in the DB
+        // TThe database update succeeded, so any cached redirect URL may now be stale
+        var cacheKey = $"shorturl:{shortCode}";
+        await _cache.RemoveAsync(cacheKey);
+
+        _logger.LogInformation(
+            "Short URL cache invalidated after update. ShortCode: {ShortCode}", entity.ShortCode
+        );
+
         _logger.LogInformation(
             "Short URL updated. ShortCode: {ShortCode}", entity.ShortCode
         );
@@ -231,6 +244,14 @@ public class ShortenController : ControllerBase
 
         _context.ShortUrls.Remove(entity);
         await _context.SaveChangesAsync();
+
+        // Invalidate Deleted Url Record Cache
+        var cacheKey = $"shorturl:{shortCode}";
+        await _cache.RemoveAsync(cacheKey);
+
+        _logger.LogInformation(
+            "Short URL cache invalidated after delete. ShortCode: {ShortCode}", shortCode
+        );
 
         _logger.LogInformation(
             "Short URL deleted. ShortCode: {ShortCode}", shortCode

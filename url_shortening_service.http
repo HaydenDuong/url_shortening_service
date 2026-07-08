@@ -36,7 +36,7 @@ PUT {{url_shortening_service_HostAddress}}/shorten/lOVa4J
 Content-Type: application/json
 
 {
-  "url": "https://www.aqw.com"
+  "url": "https://www.youtube.com"
 }
 
 ### DEL Method Testing
@@ -47,4 +47,4 @@ GET {{url_shortening_service_HostAddress}}/shorten/arlbot/stats
 Accept: application/json
 
 ### Redirect Logic Testing
-GET {{url_shortening_service_HostAddress}}/go/ePcTc8
+GET {{url_shortening_service_HostAddress}}/go/lOVa4J

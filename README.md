@@ -315,6 +315,12 @@
                         6) "https://www.google.com/"
 
 ## B - Cache invalidation on update / delete
+- Cache invalidation means removing cached data when the database changes.
+- PUT invalidates because the destination URL may have changed.
+- DELETE invalidates because the short URL no longer exists.
+- Invalidation happens after SaveChangesAsync succeeds.
+- After invalidation, the next redirect becomes a cache miss and reloads from PostgreSQL.
+
 ## C - Rate Limiting
 ## D - Cleanup / expiring URLS
 ## E - RabbitMQ async analytics
@@ -332,6 +338,7 @@
 - dotnet run from the Root folder.
 - After Stage 3E, Run this command at project root:
     "docker compose --env-file .env -f Docker/docker-compose.yml config" = Safe check, as "config" prints the final resolved Compose configuration after variables are substituted
+    "docker compose --env-file .env -f Docker/docker-compose.yml up --build"
     - Output as followings:
             name: url-shortener-project
                 services:
