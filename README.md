@@ -322,6 +322,26 @@
 - After invalidation, the next redirect becomes a cache miss and reloads from PostgreSQL.
 
 ## C - Rate Limiting
+- Because this application does not have any user / API key, thus:
+    - Client IP Address will be used instead
+- In "Program.cs", added: using System.Threading.RateLimiting;
+    - In ASP.NET Core's built-in rate limiter uses types like:
+        - FixedWindowRateLimiterOptions
+        - QueueProcessingOrder
+        - RateLimitPartition
+- In production-level, this app API does not receive traffic directly from the real user, but instead:
+    - User -> Load Balancer -> Reverse Proxy -> API Container
+    - Thus, RemoteIPAddress = Load Balancer IP but not real user's IP
+    - BAD:
+        - User A, B, C all appear as same IP.
+        - They share one rate limit bucket.
+        - One noisy user can cause others to get 429.
+    - SOLUTION:
+        - Proxies often forward the real client IP in headers such as: "X-Forwarded-For", "X-Real-IP", "Forwarded" 
+        - However, these should not be trusted blindly from the public internet, because clients can fake them.
+        - Production apps usually configure "Forwarded Headers MiddleWare" & trusted proxies / networks.
+            => Only trust X-Forwarded-For if it came from a proxy / load balancer that this app control.
+
 ## D - Cleanup / expiring URLS
 ## E - RabbitMQ async analytics
 

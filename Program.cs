@@ -9,11 +9,11 @@
 
 using Microsoft.EntityFrameworkCore;
 using url_shortening_service.Data;
+using System.Threading.RateLimiting;
 
 var builder = WebApplication.CreateBuilder(args);
 
 // Add services to the container.
-
 builder.Services.AddControllers();
 
 // Learn more about configuring OpenAPI at https://aka.ms/aspnet/openapi
@@ -30,6 +30,61 @@ builder.Services.AddOpenApi();
 builder.Services.AddStackExchangeRedisCache(options =>
 {
    options.Configuration = builder.Configuration.GetConnectionString("Redis"); 
+});
+
+// Register the Rate Limiter Service
+// Add Rate Limiting Services to Dependency Injection.
+// Configure how requests should be limited.
+builder.Services.AddRateLimiter(options =>
+{
+    // When a request is blocked by the rate limiter, return HTTP 429.
+    // "429 Too Many Requests" = standard HTTP status for rate limiting.
+    // If a client sends too many request => they will receive "HTTP/1.1 429 Too Many Requests"
+    options.RejectionStatusCode = StatusCodes.Status429TooManyRequests;
+
+    // "options.GlobalLimiter = ..." : Apply this limiter to all requests / endpoints in this app by default
+    // "PartitionedRateLimiter.Create<HttpContext, string>(httpContext => ...) = Create a rate limiter that can separate clients into different groups
+    // Those different groups are called partitions.
+    // By normal convention, no user is allow to consume the entire app's limit.
+    // E.g: 
+    //      Bad: Whole API allows 10 requests / minute total
+    //           One user sends 10 requests => Everyone else gets blocked.
+    //      Better: Each IP gets 10 requests / minute
+    // Partitioning lets every client get their own bucket / window.
+    // "HttpContext" = use information from the current HTTP Request
+    // "string" = the partition key will be a string => In this case, the string is the IP address of the client
+    options.GlobalLimiter = PartitionedRateLimiter.Create<HttpContext, string>(httpContext =>
+        // This creates a fixed-window limiter for each partition.
+        RateLimitPartition.GetFixedWindowLimiter(
+            // Extract the IP address from the current HTTP request and convert it into string, if the IP Address is null then use "unknown" as fallback
+            // this will not causing the app to crash if IP address is missing.
+            partitionKey: httpContext.Connection.RemoteIpAddress?.ToString() ?? "unknown",
+
+            // The factor creates limiter settings for each partition
+            // In C#, "_" is often used as a variable name when: "A value is passed to us, but we do not care about it"
+            // In this case, for any partition / client, use these same fixed window settings in the followings
+            // In fact, this can be written as: factory: partitionKey => new FixedWindowRateLimiterOptions{...}
+            // Remember, since we do not make any exclusion setting for an IP address => "_" is being used in here
+            factory: _ => new FixedWindowRateLimiterOptions
+            {
+                // Allow 10 requests per window.
+                PermitLimit = 10,
+
+                // The window length is 1 minute => 10 requests per minute.
+                Window = TimeSpan.FromMinutes(1),
+
+                
+                // If requets were queued, process older requests first.
+                QueueProcessingOrder = QueueProcessingOrder.OldestFirst,
+
+                // Rate Limiters can optionally queue extra requests instead of rejecting them immediately.
+                // Since QueueLimit is set to 0, so extra requests are rejected instead of queued.
+                // Do not queue extra requests => Reject immediately with Http 429
+                // This is required parameter by "FixedWindowRateLimiterOptions", thus, it must be included
+                QueueLimit = 0
+            }
+        )
+    );
 });
 
 // Tell DI: "When someone needs AppDbContext, build it like this."
@@ -60,6 +115,9 @@ if (app.Environment.IsDevelopment())
     app.MapOpenApi();
 }
 
+// Middleware Order:
+// HTTPS Redirection -> Rate Limiter -> Authorization (Not yet implemented) -> Controllers
+
 // When running inside Docker, skip HTTPS redirection for now
 // Else, keep HTTPS redirection when running normally on local machine instead of Docker
 // .NET containers automatically set "DOTNET_RUNNING_IN_CONTAINER=true" 
@@ -74,6 +132,8 @@ if (!builder.Configuration.GetValue<bool>("DOTNET_RUNNING_IN_CONTAINER"))
 {
     app.UseHttpsRedirection();
 }
+
+app.UseRateLimiter();
 
 app.UseAuthorization();
 

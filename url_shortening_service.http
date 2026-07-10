@@ -40,7 +40,7 @@ Content-Type: application/json
 }
 
 ### DEL Method Testing
-DELETE {{url_shortening_service_HostAddress}}/shorten/fDqu4X
+DELETE {{url_shortening_service_HostAddress}}/shorten/lOVa4J
 
 ### GET STATS Method Testing
 GET {{url_shortening_service_HostAddress}}/shorten/arlbot/stats
