@@ -11,6 +11,18 @@
 #   3. Let API reach DB over internal Docker network.
 name: url-shortener-project
 services:
+  rabbitmq:
+    image: rabbitmq:3-management
+    container_name: urlshortener_webapp_RabbitMQ
+    ports:
+      # This lets local laptop open RabbitMQ's web dashboard at http://localhost:15672
+      - "${RABBITMQ_MANAGEMENT_HOST_PORT}:15672"
+    environment:
+      RABBITMQ_DEFAULT_USER: ${RABBITMQ_DEFAULT_USER}
+
+      # RabbitMQ's Docker image expects "RABBITMQ_DEFAULT_PASS"
+      RABBITMQ_DEFAULT_PASS: ${RABBITMQ_DEFAULT_PASS}
+
   redis:
     image: redis:7-alpine
     container_name: urlshortener_webapp_Redis
@@ -48,11 +60,15 @@ services:
       # The current Docker PostgreSQL container does not have the Linux library for that feature: "libgssapi_krb5.so.2"
       ConnectionStrings__Postgres: "Host=db;Port=${POSTGRES_CONTAINER_PORT};Database=${POSTGRES_DB};Username=${POSTGRES_USER};Password=${POSTGRES_PASSWORD};GSS Encryption Mode=Disable"
       ConnectionStrings__Redis: "${REDIS_CONNECTION_STRING}"
+
+      # RABBITMQ_CONNECTION_STRING=amqp://guest:change_me@rabbitmq:5672/ = API container communicates with RabbitMQ container inside Docker Compose
+      ConnectionStrings__RabbitMq: "${RABBITMQ_CONNECTION_STRING}"
     
     # this tell Docker Compose to: "Start db before api"
     depends_on:
       - redis
       - db
+      - rabbitmq
 
 volumes:
   pgdata:

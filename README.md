@@ -375,7 +375,58 @@
         - IServiceScopeFactory = lets the background service create a short-lived DI scope when needed
 
 
-## E - RabbitMQ async analytics
+## E - RabbitMQ async analytics - Decoupling with asynchronous events
+- Before this stage: In "UrlRedirectController.cs", redirect analytics happen directly inside the request: 
+    await _context.ShortUrls
+        .Where(s => s.ShortCode == shortCode)
+        .ExecuteUpdateAsync(...)
+- After this stage:
+    GET /go/{shortCode}
+        -> Redis / Postgres finds redirect URL
+        -> API publishes "short code was accessed" event to RabbitMQ
+        -> API redirects user immediately
+    Background worker:
+        -> Consumes RabbitMQ event.
+        -> Updates AccessCount and LastAccessedAt in PostgreSQL.
+- Lesson: Redirect should stay fast, while analytics can happen slightly later.
+- Step-by-step:
+    1. Add RabbitMQ to Docker Compose.
+    2. Add RabbitMQ values to ".env" and ".env.example".
+    3. Install RabbitMQ .NET client package.
+        - "dotnet add package RabbitMQ.Client", this package gives:
+            - ConnectionFactory = builds a connection to RabbitMQ using connection strings in ".env"
+            - IConnection = the network connection from this app to RabbitMQ.
+            - IChannel = the "conversation lane" used to declare queues, publish messages, and consume messages.
+            - BasicPublishAsync = sends a message into RabbitMQ.
+            - BasicConsumeAsync = starts listening to a queue.
+            - AsyncEventingBasicConsumer = lets this app's background worker run async code whenever a message arrives.
+    4. Create a tiny analytics event model.
+        - "Models/ShortUrlAccessedEvent.cs"
+    5. Create publisher service.
+        - "Services/ShortUrlAnalyticsPublisher.cs"
+    6. Register the Publisher in DI Container
+    7. Inject published into "UrlRedirectController.cs".
+    8. Replace direct DB analytics update with publising an event.
+        - Check "/Controllers/UrlRedirectController.cs"
+    9. Create a background consumer service.
+        - "/Services/ShortUrlAnalyticsConsumerService.cs"
+    10. Register services in "Program.cs".
+    11. Test with redirects and stats.
+        - Access RabbitMQ Dashboard = http://localhost:15672
+        - Credentials: username = guest
+                       password = guest
+    12. Fix "Microsoft.OpenApi / NU1903 vulnerability warning": change 10.0.8 to 10.0.9 for <PackageReference Include="Microsoft.AspNetCore.OpenApi" Version="10.0.9" />
+            - And add this line below the above: <PackageReference Include="Microsoft.OpenApi" Version="2.7.5" />
+
+- App's Architecture After this stage:
+    - API container = handles HTTP requests.
+        - Controllers.
+        - Cleanup background service.
+        - RabbitMQ analytics consumer background service
+            - A more advanced system: would make this into a separate container (analytics-worker container)
+    - PostgreSQL container = Permanent source of truth.
+    - Redis container = Fast temporary redirect cache.
+    - RabbitMQ container = Queue for background analytics events.
 
 # Testing:
 - Before Stage 3E, Run the docker: "docker compose -f Docker/docker-compose.yml up -d" or "docker compose up -d" within the Docker folder.

@@ -8,7 +8,7 @@ Content-Type: application/json
 
 {
   "url": "https://www.example.com/some/long/url",
-  "expiresAt": "2026-07-13T05:23:00Z"
+  "expiresAt": "2026-07-14T05:23:00Z"
 }
 
 ###
@@ -44,11 +44,11 @@ Content-Type: application/json
 DELETE {{url_shortening_service_HostAddress}}/shorten/lOVa4J
 
 ### GET STATS Method Testing
-GET {{url_shortening_service_HostAddress}}/shorten/arlbot/stats
+GET {{url_shortening_service_HostAddress}}/shorten/Wh1eM4/stats
 Accept: application/json
 
 ### Redirect Logic Testing
-GET {{url_shortening_service_HostAddress}}/go/Bo7MC1
+GET {{url_shortening_service_HostAddress}}/go/Wh1eM4
 
 ### Manually Cleanup Expired URL
 DELETE {{url_shortening_service_HostAddress}}/shorten/cleanup/expired

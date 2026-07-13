@@ -14,6 +14,20 @@ using url_shortening_service.Services;
 
 var builder = WebApplication.CreateBuilder(args);
 
+// "builder.Services" collection = dependency injection container
+// Purpose: ASP.NET Core has this as a central place that knows how to create dependencies for classes in this application to call and use without need to manually create them
+// It serves as "service registry", thus, when a controller constructor says:
+//      public RedirectController(
+//          AppDbContext context,
+//          ILogger<RedirectController> logger,
+//          IDistributedCache cache)
+// ASP.NET sees those and thinks:
+//      To create RedirectController, I need:
+//              - AppDbContext
+//              - ILogger<RedirectController>
+//              - IDistributedCache
+// It will checks the DI container ("builder.Services") => ASP.NET creates those objects and passes them (injecting) into the constructor
+
 // Add services to the container.
 builder.Services.AddControllers();
 
@@ -35,6 +49,15 @@ builder.Services.AddControllers();
 //      4. "ExpiredShortUrlCleanupService" starts running.
 //      5. The cleanup loop begins.
 builder.Services.AddHostedService<ExpiredShortUrlCleanupService>();
+
+builder.Services.AddHostedService<ShortUrlAnalyticsConsumerService>();
+
+// This tells ASP.NET Core's DI container: If some class asks for ShortUrlAnalyticsPublisher => create one and give it to that class
+// "AddScoped" is used, because, this app's controllers are request-scoped => ASP.NET creates controller-related services per HTTP request
+// Thus, "AddScoped<ShortUrlAnalyticsPublisher>()" = create one publisher instance for the curernt HTTP request scope.
+//          Resuse it within that same request if needed.
+//          Dispose it when the request ends.
+builder.Services.AddScoped<ShortUrlAnalyticsPublisher>();
 
 // Learn more about configuring OpenAPI at https://aka.ms/aspnet/openapi
 builder.Services.AddOpenApi();

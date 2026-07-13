@@ -1,6 +1,7 @@
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using url_shortening_service.Data;
+using url_shortening_service.Services;
 using Microsoft.Extensions.Caching.Distributed;
 
 namespace url_shortening_service.Controllers;
@@ -13,18 +14,21 @@ public class RedirectController : ControllerBase
     // Added a logger field to inject into the constructor
     private readonly ILogger<RedirectController> _logger;
     private readonly IDistributedCache _cache;
+    private readonly ShortUrlAnalyticsPublisher _analyticsPublisher;
 
     public RedirectController(
         AppDbContext context, 
         ILogger<RedirectController> logger,
-        IDistributedCache cache)
+        IDistributedCache cache,
+        ShortUrlAnalyticsPublisher analyticsPublisher)
     {
         _context = context;
 
-        // Injected into the constructor just like AppDbContext
         _logger = logger;
 
         _cache = cache;
+
+        _analyticsPublisher = analyticsPublisher;
     }
 
     [HttpGet("{shortCode}")]
@@ -141,6 +145,7 @@ public class RedirectController : ControllerBase
         // entity.LastAccessedAt = DateTime.UtcNow;
         // await _context.SaveChangesAsync();
 
+        // Before Stage 4E
         // We already loaded the entity above so we can read/validate entity.Url for the redirect.
         // Do not update AccessCount by doing:
         //     entity.AccessCount += 1;
@@ -150,11 +155,29 @@ public class RedirectController : ControllerBase
         // ExecuteUpdateAsync sends the increment to PostgreSQL instead:
         //     AccessCount = AccessCount + 1
         // PostgreSQL performs that update atomically, so concurrent redirects are less likely to overwrite each other's analytics updates.
-        await _context.ShortUrls
-            .Where(s => s.ShortCode == shortCode)
-            .ExecuteUpdateAsync(setters => setters
-                .SetProperty(s => s.AccessCount, s => s.AccessCount + 1)
-                .SetProperty(s => s.LastAccessedAt, s => DateTime.UtcNow));
+        // await _context.ShortUrls
+        //     .Where(s => s.ShortCode == shortCode)
+        //     .ExecuteUpdateAsync(setters => setters
+        //         .SetProperty(s => s.AccessCount, s => s.AccessCount + 1)
+        //         .SetProperty(s => s.LastAccessedAt, s => DateTime.UtcNow));
+
+        // Stage 4E - Replace Direct Analytics DB Update with RabbitMQ Publish
+        try
+        {
+            await _analyticsPublisher.PublishAccessedAsync(shortCode, DateTime.UtcNow);
+        }
+        // Catch is needed here, because:
+        // If RabbitMQ is down, we probably still want the redirect to work => Send the user to the destination URL
+        // Try to publish analytics:
+        //      If analytics publish fails => log the problem.
+        //      Still return the redirect.
+        catch (Exception ex)
+        {
+            _logger.LogError(
+                ex,
+                "Failed to publish short URL analytics event. ShortCode: {ShortCode}", shortCode
+            );
+        }
 
         _logger.LogInformation(
             "Short URL redirect succeeded. ShortCode: {ShortCode}", shortCode
