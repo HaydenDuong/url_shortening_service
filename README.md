@@ -492,3 +492,41 @@
 # Remember:
 - API is public to laptop / browser.
 - PostgreSQL & Redis are internal services. => Redis can be reachable by the API container, but not exposed directly to local laptop.
+
+# Achievements:
+- ASP.NET Core Web API
+- Controllers and HTTP endpoints
+- DTOs and validation
+- PostgreSQL with EF Core
+- Migrations
+- Docker and Docker Compose
+- Environment-based configuration
+- Redis caching
+- Cache invalidation
+- Rate limiting
+- Expiration/cleanup background service
+- Structured logging
+- RabbitMQ async processing
+- Basic analytics
+- Concurrency-safe database updates
+
+# Missings:
+- Authentication
+- Authorization
+- User/account model
+- API keys or JWT tokens
+- Refresh tokens/session handling
+- Role/permission checks
+- Tests
+- CI/CD
+- Health checks
+- Better retry/dead-letter handling for RabbitMQ
+- Observability beyond logs
+- Secrets management
+
+# Reuseable:
+- Main entity in PostgreSQL
+- Frequently-read data in Redis
+- Slow/side work in RabbitMQ
+- Background worker processes queued events
+- API stays focused on HTTP behavior
