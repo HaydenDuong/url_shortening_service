@@ -71,7 +71,8 @@ public class ShortenController : ControllerBase
             {
                 // Warning is used because the client sent something invalid/unusual, but the app handled it correctly.
                 _logger.LogWarning(
-                    "Create short URL failed because the request body was missing");
+                    "Create short URL failed because the request body was missing"
+                );
 
                 return BadRequest("Request body is required.");
             }
@@ -90,7 +91,17 @@ public class ShortenController : ControllerBase
                 _logger.LogWarning(
                     "Create short URL failed because input URL was invalid."
                 );
+
                 return BadRequest("Url must be a valid absolute http or https URL.");
+            }
+
+            if (request.ExpiresAt != null && request.ExpiresAt <= DateTime.UtcNow)
+            {   
+                _logger.LogWarning(
+                    "Create short URL failed because ExpiresAt was in the past."
+                );
+
+                return BadRequest("The provided Expires Date is not valid");
             }
 
             // --- 1) Generate a random short code (random + unique) ---
@@ -104,6 +115,7 @@ public class ShortenController : ControllerBase
                 ShortCode = shortCode,
                 CreatedAt = now,
                 UpdatedAt = now,
+                ExpiresAt = request.ExpiresAt,
                 AccessCount = 0
             };
 
@@ -123,7 +135,8 @@ public class ShortenController : ControllerBase
                 Url = entity.Url,
                 ShortCode = entity.ShortCode,
                 CreatedAt = entity.CreatedAt,
-                UpdatedAt = entity.UpdatedAt
+                UpdatedAt = entity.UpdatedAt,
+                ExpiresAt = entity.ExpiresAt
             };
 
             // --- 5) 201 Created + body (Location header points at future GET URL) ---
@@ -153,7 +166,8 @@ public class ShortenController : ControllerBase
             Url = entity.Url,
             ShortCode = entity.ShortCode,
             CreatedAt = entity.CreatedAt,
-            UpdatedAt = entity.UpdatedAt
+            UpdatedAt = entity.UpdatedAt,
+            ExpiresAt = entity.ExpiresAt
         };
 
         return Ok(response); // 200 + JSON
@@ -183,6 +197,15 @@ public class ShortenController : ControllerBase
             return BadRequest("Url must be a valid absolute http or https URL.");
         }
 
+        if (request.ExpiresAt != null && request.ExpiresAt <= DateTime.UtcNow)
+        {
+            _logger.LogWarning(
+                "Update short URL failed because ExpiresAt was in the past. ShortCode: {ShortCode}", shortCode
+            );
+
+            return BadRequest("The Expires Date must be a date in the future.");
+        }
+
         // check if the shortCode from URL is legit or not
         var entity = await _context.ShortUrls.FirstOrDefaultAsync(s => s.ShortCode == shortCode);
 
@@ -197,6 +220,7 @@ public class ShortenController : ControllerBase
 
         entity.Url = normalizedUrl;
         entity.UpdatedAt = DateTime.UtcNow;
+        entity.ExpiresAt = request.ExpiresAt;
 
         await _context.SaveChangesAsync();
 
@@ -220,11 +244,32 @@ public class ShortenController : ControllerBase
             Url = entity.Url,
             ShortCode = entity.ShortCode,
             CreatedAt = entity.CreatedAt,
-            UpdatedAt = entity.UpdatedAt
+            UpdatedAt = entity.UpdatedAt,
+            ExpiresAt = entity.ExpiresAt
         };
 
         return Ok(response);
 
+    }
+
+    [HttpDelete("cleanup/expired")]
+    public async Task<ActionResult<int>> DeleteExpired()
+    {
+        // "deletedCount" is returned automatically from the database operation (PostGreSQL)
+        // EF Core sends a "DELETE FROM ... WHERE ...;" command to PostGreSQL
+        // PostGreSQL deletes all matching rows.
+        // PostGreSQL reports how many rows were affected.
+        // EF Core returns that number as an int.
+        // This code stores that number in var "deletedCount"
+        var deletedCount = await _context.ShortUrls
+            .Where(s => s.ExpiresAt.HasValue && s.ExpiresAt <= DateTime.UtcNow)
+            .ExecuteDeleteAsync();
+        
+        _logger.LogInformation(
+            "Expired short URLs deleted. Count: {DeletedCount}", deletedCount
+        );
+
+        return Ok(deletedCount);
     }
 
     // Delete an existing record based on shortCode in input URL
@@ -282,6 +327,7 @@ public class ShortenController : ControllerBase
             ShortCode = entity.ShortCode,
             CreatedAt = entity.CreatedAt,
             UpdatedAt = entity.UpdatedAt,
+            ExpiresAt = entity.ExpiresAt,
             LastAccessedAt = entity.LastAccessedAt,
             AccessCount = entity.AccessCount
         };

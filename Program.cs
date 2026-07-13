@@ -10,11 +10,31 @@
 using Microsoft.EntityFrameworkCore;
 using url_shortening_service.Data;
 using System.Threading.RateLimiting;
+using url_shortening_service.Services;
 
 var builder = WebApplication.CreateBuilder(args);
 
 // Add services to the container.
 builder.Services.AddControllers();
+
+// This means:
+//      When the app starts, create and run ExpiredShortUrlCleanupService as a hosted background service.
+//      Whent he app shuts down, ask it to stop cleanly
+// "AddHostedService<>" = register this class as a background worker managed by the ASP.Net host.
+// "Host" is the thing running this whole application:
+//      Starts Kestrel.
+//      Loads configuration.
+//      Sets up dependency injection.
+//      Starts controllers.
+//      Starts hosted services.
+//      Handles shutdown.
+// After this registration, startup becomes roughly:
+//      1. App starts.
+//      2. DI container is built
+//      3. Kestrel starts listening for HTTP requests.
+//      4. "ExpiredShortUrlCleanupService" starts running.
+//      5. The cleanup loop begins.
+builder.Services.AddHostedService<ExpiredShortUrlCleanupService>();
 
 // Learn more about configuring OpenAPI at https://aka.ms/aspnet/openapi
 builder.Services.AddOpenApi();

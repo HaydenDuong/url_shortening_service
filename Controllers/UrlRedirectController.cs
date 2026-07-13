@@ -79,6 +79,19 @@ public class RedirectController : ControllerBase
 
                 return NotFound();
             }
+
+            // Check if the requested entity has expiresAt value is expired or not
+            // If yes, then delete its cache and return StatusCode 410
+            if (entity.ExpiresAt.HasValue && entity.ExpiresAt.Value <= DateTime.UtcNow)
+            {
+                _logger.LogInformation(
+                    "Redirect failed because short URL expired. ShortCode: {ShortCode}", shortCode
+                );
+
+                await _cache.RemoveAsync(cacheKey);
+
+                return StatusCode(StatusCodes.Status410Gone, "Short URL has expired.");
+            }
         
             // A Logic Check to make sure if the retrieved URL from database is not broken (null or whitespace)
             // This should be used with Error for Logging, because:
@@ -93,12 +106,28 @@ public class RedirectController : ControllerBase
             }
 
             redirectUrl = entity.Url;
+
+            // If the request entity has no expiration date: Redis will cache for normal 10 minutes.
+            // If the time until the Expiration of the request entity (entity.ExpiresAt.Value - Datetime.UtcNow), is more than 10 minutes => cache for 10 minutes normally.
+            // Else, Redis should cache for the remaining time before expiration.
+            var cacheLifeTime = TimeSpan.FromMinutes(10);
+
+            if (entity.ExpiresAt.HasValue)
+            {
+                var timeUntilExpiration = entity.ExpiresAt.Value - DateTime.UtcNow;
+
+                if (timeUntilExpiration < cacheLifeTime)
+                {
+                    cacheLifeTime = timeUntilExpiration;
+                }
+            }
+
             await _cache.SetStringAsync(
                 cacheKey,
                 redirectUrl,
                 new DistributedCacheEntryOptions
                 {
-                    AbsoluteExpirationRelativeToNow = TimeSpan.FromMinutes(10)
+                    AbsoluteExpirationRelativeToNow = cacheLifeTime
                 }
             );
             

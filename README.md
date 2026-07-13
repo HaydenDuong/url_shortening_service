@@ -343,6 +343,38 @@
             => Only trust X-Forwarded-For if it came from a proxy / load balancer that this app control.
 
 ## D - Cleanup / expiring URLS
+- Important lessons:
+    - Expiration must be enforced before redirect logic.
+    - Cache must not bypass expiration rules.
+- Expiring URLs = a short URL stops working after a certain time (not the true website URL)
+    - Common Reasons why a short URL must be expired:
+        - Temporary campaigns.
+        - Limited-time promotions.
+        - Password reset links.
+        - Event Registration links.
+        - Private files shares.
+        - Demo links.
+        - Security-sensitive links.
+        - Cleanup old unused data.
+- Cleanup = eventually remove expired rows from the database.
+- Steps:
+    1. Add "ExpiresAt" to the database model.
+    2. Add "ExpiresAt" to response DTOs.
+    3. Allow create / update request to optionally set "ExpiresAt".
+    4. Add validation: expiry must be in the future.
+    5. Add migration / database update.
+    6. Change redirect logic:
+        - If URL is expired, return a non-redirect response.
+        - Remove its Redis cache key if needed.
+    7. Adjust Redis caching so cached URL does not live longer than the URL expiry
+    8. Add cleanup process for expired rows.
+- Important Concepts:
+    - A Controller runs because an HTTP request came in.
+        - AppDbContext = should live only for one small unit of work.
+    - A background service runs because the app is live, a.k.a, lives for the whole app lifetime.
+        - IServiceScopeFactory = lets the background service create a short-lived DI scope when needed
+
+
 ## E - RabbitMQ async analytics
 
 # Testing:

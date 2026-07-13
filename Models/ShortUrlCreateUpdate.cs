@@ -10,4 +10,5 @@ public class ShortUrlCreateUpdate
     // Checking if the input URL is valid URL or not
     [Url]
     public string Url { get; set; } = string.Empty;
+    public DateTime? ExpiresAt { get; set; }
 }

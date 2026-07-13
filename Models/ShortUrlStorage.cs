@@ -11,5 +11,6 @@ public class ShortUrlStorage
     public DateTime CreatedAt { get; set; }
     public DateTime UpdatedAt { get; set; }
     public DateTime? LastAccessedAt { get; set; }
+    public DateTime? ExpiresAt { get; set; }
     public int AccessCount { get; set; }
 }

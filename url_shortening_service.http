@@ -7,7 +7,8 @@ POST {{url_shortening_service_HostAddress}}/shorten
 Content-Type: application/json
 
 {
-  "url": "https://www.example.com/some/long/url"
+  "url": "https://www.example.com/some/long/url",
+  "expiresAt": "2026-07-13T05:23:00Z"
 }
 
 ###
@@ -47,4 +48,7 @@ GET {{url_shortening_service_HostAddress}}/shorten/arlbot/stats
 Accept: application/json
 
 ### Redirect Logic Testing
-GET {{url_shortening_service_HostAddress}}/go/lOVa4J
+GET {{url_shortening_service_HostAddress}}/go/Bo7MC1
+
+### Manually Cleanup Expired URL
+DELETE {{url_shortening_service_HostAddress}}/shorten/cleanup/expired
