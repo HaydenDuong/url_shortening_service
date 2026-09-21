@@ -55,10 +55,8 @@ public class ShortenController : ControllerBase
                 return BadRequest("The provided Expires Date is not valid");
             }
 
-            // --- 1) Generate a random short code (random + unique) ---
             string shortCode = GenerateUniqueShortCode();
 
-            // --- 2) Build Entity (DB row) - server sets everything except Url from client ---
             var now = DateTime.UtcNow;
             var entity = new ShortUrlStorage
             {
@@ -70,16 +68,12 @@ public class ShortenController : ControllerBase
                 AccessCount = 0
             };
 
-            // --- 3) Stage row in Entity Framework (not committed until SaveChanges) ---
             await SaveShortUrlWithRetryAsync(entity);
             
-            // --- 3.5) Log the successful creation ---
-            // Useful here because it tells developers that a business event happened and ShortCode is safe enough to search by later.
             _logger.LogInformation(
                 "Short URL created. ShortCode: {ShortCode}", entity.ShortCode
             );
 
-            // --- 4) Map to response DTO (no AccessCount on normal response) ---
             var response = new ShortUrlResponse
             {
                 Id = entity.Id,
@@ -90,16 +84,12 @@ public class ShortenController : ControllerBase
                 ExpiresAt = entity.ExpiresAt
             };
 
-            // --- 5) 201 Created + body (Location header points at future GET URL) ---
             return Created($"/shorten/{entity.ShortCode}", response);
         }
     
-    // Retrieving a shortCode
-    // GET http://localhost:5184/shorten/abc123
     [HttpGet("{shortCode}")]
     public async Task<ActionResult<ShortUrlResponse>> GetByShortCode(string shortCode)
     {
-        // shortCode comes from URL - "abc123", not from JSON body
         var entity = await _context.ShortUrls.FirstOrDefaultAsync(s => s.ShortCode == shortCode);
 
         if (entity is null)
@@ -108,7 +98,7 @@ public class ShortenController : ControllerBase
                 "Get short URL failed because short code was not found. ShortCode: {ShortCode}", shortCode
             );
 
-            return NotFound(); // 404 - Not Found
+            return NotFound();
         } 
 
         var response = new ShortUrlResponse
@@ -121,10 +111,9 @@ public class ShortenController : ControllerBase
             ExpiresAt = entity.ExpiresAt
         };
 
-        return Ok(response); // 200 + JSON
+        return Ok(response);
     }
 
-    // Update the existing URL in DB
     [HttpPut("{shortCode}")]
     public async Task<ActionResult<ShortUrlResponse>> UpdateUrl(
         string shortCode,
@@ -157,7 +146,6 @@ public class ShortenController : ControllerBase
             return BadRequest("The Expires Date must be a date in the future.");
         }
 
-        // check if the shortCode from URL is legit or not
         var entity = await _context.ShortUrls.FirstOrDefaultAsync(s => s.ShortCode == shortCode);
 
         if (entity is null) 
@@ -175,8 +163,6 @@ public class ShortenController : ControllerBase
 
         await _context.SaveChangesAsync();
 
-        // Cache removal after new url is updated and saved successfully in the DB
-        // TThe database update succeeded, so any cached redirect URL may now be stale
         var cacheKey = $"shorturl:{shortCode}";
         await _cache.RemoveAsync(cacheKey);
 
@@ -188,7 +174,6 @@ public class ShortenController : ControllerBase
             "Short URL updated. ShortCode: {ShortCode}", entity.ShortCode
         );
 
-        // Create a new Response to return back to UI
         var response = new ShortUrlResponse
         {
             Id = entity.Id,
@@ -217,7 +202,6 @@ public class ShortenController : ControllerBase
         return Ok(deletedCount);
     }
 
-    // Delete an existing record based on shortCode in input URL
     [HttpDelete("{shortCode}")]
     public async Task<ActionResult> Delete(string shortCode)
     {
@@ -235,7 +219,6 @@ public class ShortenController : ControllerBase
         _context.ShortUrls.Remove(entity);
         await _context.SaveChangesAsync();
 
-        // Invalidate Deleted Url Record Cache
         var cacheKey = $"shorturl:{shortCode}";
         await _cache.RemoveAsync(cacheKey);
 
@@ -247,10 +230,9 @@ public class ShortenController : ControllerBase
             "Short URL deleted. ShortCode: {ShortCode}", shortCode
         );
 
-        return NoContent(); //204 - No Content, empty body
+        return NoContent();
     }
 
-    // GET Statistic for a particular shortCode based on input URL
     [HttpGet("{shortCode}/stats")]
     public async Task<ActionResult<ShortUrlResponseStats>> GetStat(string shortCode)
     {
@@ -280,19 +262,15 @@ public class ShortenController : ControllerBase
         return Ok(response);
     }
 
-    // Method for Generate Unique ShortCode for input URL
     private string GenerateUniqueShortCode()
     {
         const string chars = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
         while(true)
         {
-            // Generate a code of 6 random chars
             var code = new string(Enumerable.Range(0, 6)
                 .Select(_ => chars[Random.Shared.Next(chars.Length)])
                 .ToArray());
             
-            // Check if this code is present or not
-            // Table "ShortUrls" là một attribute của _context
             bool exists = _context.ShortUrls.Any(s => s.ShortCode == code);
             if (!exists)
                 return code;
