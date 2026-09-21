@@ -36,3 +36,20 @@ ASP.NET Core API
 
 The current analytics publisher opens a RabbitMQ connection per publish operation.
 A production implementation would reuse a long-lived connection and manage channel lifecycle separately.
+
+## Running Locally
+
+1. Copy `.env.example` to `.env`
+2. Update local credentials if needed
+3. Start the stack:
+
+```bash
+docker compose -f Docker/docker-compose.yml up --build
+
+
+```md
+## Documentation
+
+- [Project Goals](Documents/goals.md)
+- [Learning Notes](Documents/learning_notes.md)
+- [Dependency Injection Notes](Documents/DependencyInjectionNotes.md)
