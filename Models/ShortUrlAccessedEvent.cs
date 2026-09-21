@@ -15,7 +15,7 @@ namespace url_shortening_service.Models;
 //          Reads JSON from RabbitMQ
 //          Deserializes it back into ShortUrlAccessedEvent
 //          Updates PostgreSQL
-// => This calss becomes the agreement between those two pieces of code.
+// => This class becomes the agreement between those two pieces of code.
 public class ShortUrlAccessedEvent
 {
     public string ShortCode { get; set;} = string.Empty;
