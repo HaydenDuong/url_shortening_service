@@ -1,26 +1,12 @@
-# Full mental model is:
-#   1. Compose project creates a shared network.
-#   2. db runs PostgreSQL.
-#   3. api builds from your DockerFile.
-#   4. api listens on container port 8080.
-#   5. Your laptop reaches api through localhost:5184.
-#   6. api reaches database through db:5432
-# Production-Style Default:
-#   1. Publish API port.
-#   2. Do not publish DB port.
-#   3. Let API reach DB over internal Docker network.
 name: url-shortener-project
 services:
   rabbitmq:
     image: rabbitmq:3-management
     container_name: urlshortener_webapp_RabbitMQ
     ports:
-      # This lets local laptop open RabbitMQ's web dashboard at http://localhost:15672
       - "${RABBITMQ_MANAGEMENT_HOST_PORT}:15672"
     environment:
       RABBITMQ_DEFAULT_USER: ${RABBITMQ_DEFAULT_USER}
-
-      # RabbitMQ's Docker image expects "RABBITMQ_DEFAULT_PASS"
       RABBITMQ_DEFAULT_PASS: ${RABBITMQ_DEFAULT_PASS}
 
   redis:
@@ -30,9 +16,6 @@ services:
   db:
     image: postgres:16
     container_name: urlshortener_webapp_DB
-    # Removing this line "ports: ..." will prevent this laptop from reaching / connecting to PostgreSQL container of this project
-    # Tools like pgAdmin, DBeaver, or psql connecting to localhost:5434 would stop working
-    # Except: "docker exec -it ..." because this command enters the container directly.
     ports:
       - "${POSTGRES_HOST_PORT}:${POSTGRES_CONTAINER_PORT}"
     environment:
@@ -43,10 +26,6 @@ services:
       - pgdata:/var/lib/postgresql/data
   
   api:
-    # This tells Docker Compose to: "Build the API Image from a Dockerfile instead of pulling a ready-made image"
-    # Because the compose file of this project is in Docker/docker-compose.yml, while the Dockerfile of the API Container is one folder up => ..
-    # "context" = "Which folder should Docker send into the build?"
-    # "dockerfile" = "Which Dockerfile should Docker use inside that context?"
     build:
       context: ..
       dockerfile: Dockerfile
@@ -54,17 +33,10 @@ services:
     ports:
       - "${API_HOST_PORT}:${API_CONTAINER_PORT}"
     environment:
-      # Npgsql came from PostgreSQL driver - This application is using this to connect to PostgreSQL
-      # When Npgsql starts a connection, it may check whether a security feature called GSS/Kerberos is available or not
-      # This security feature is used in some corporate / enterprise authentication setups.
-      # The current Docker PostgreSQL container does not have the Linux library for that feature: "libgssapi_krb5.so.2"
       ConnectionStrings__Postgres: "Host=db;Port=${POSTGRES_CONTAINER_PORT};Database=${POSTGRES_DB};Username=${POSTGRES_USER};Password=${POSTGRES_PASSWORD};GSS Encryption Mode=Disable"
       ConnectionStrings__Redis: "${REDIS_CONNECTION_STRING}"
-
-      # RABBITMQ_CONNECTION_STRING=amqp://guest:change_me@rabbitmq:5672/ = API container communicates with RabbitMQ container inside Docker Compose
       ConnectionStrings__RabbitMq: "${RABBITMQ_CONNECTION_STRING}"
     
-    # this tell Docker Compose to: "Start db before api"
     depends_on:
       - redis
       - db
