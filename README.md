@@ -45,11 +45,3 @@ A production implementation would reuse a long-lived connection and manage chann
 
 ```bash
 docker compose -f Docker/docker-compose.yml up --build
-
-
-```md
-## Documentation
-
-- [Project Goals](Documents/goals.md)
-- [Learning Notes](Documents/learning_notes.md)
-- [Dependency Injection Notes](Documents/DependencyInjectionNotes.md)

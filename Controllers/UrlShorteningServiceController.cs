@@ -27,65 +27,67 @@ public class ShortenController : ControllerBase
     [HttpPost]
     public async Task<ActionResult<ShortUrlResponse>> Create(
         [FromBody] ShortUrlCreateUpdate request)
+    {
+        if (request is null)
         {
-            if (request is null)
-            {
-                _logger.LogWarning(
-                    "Create short URL failed because the request body was missing"
-                );
-
-                return BadRequest("Request body is required.");
-            }
-
-            if (!TryNormalizeHttpUrl(request.Url, out var normalizedUrl))
-            {
-                _logger.LogWarning(
-                    "Create short URL failed because input URL was invalid."
-                );
-
-                return BadRequest("Url must be a valid absolute http or https URL.");
-            }
-
-            if (request.ExpiresAt != null && request.ExpiresAt <= DateTime.UtcNow)
-            {   
-                _logger.LogWarning(
-                    "Create short URL failed because ExpiresAt was in the past."
-                );
-
-                return BadRequest("The provided Expires Date is not valid");
-            }
-
-            string shortCode = GenerateUniqueShortCode();
-
-            var now = DateTime.UtcNow;
-            var entity = new ShortUrlStorage
-            {
-                Url = normalizedUrl,
-                ShortCode = shortCode,
-                CreatedAt = now,
-                UpdatedAt = now,
-                ExpiresAt = request.ExpiresAt,
-                AccessCount = 0
-            };
-
-            await SaveShortUrlWithRetryAsync(entity);
-            
-            _logger.LogInformation(
-                "Short URL created. ShortCode: {ShortCode}", entity.ShortCode
+            _logger.LogWarning(
+                "Create short URL failed because the request body was missing"
             );
 
-            var response = new ShortUrlResponse
-            {
-                Id = entity.Id,
-                Url = entity.Url,
-                ShortCode = entity.ShortCode,
-                CreatedAt = entity.CreatedAt,
-                UpdatedAt = entity.UpdatedAt,
-                ExpiresAt = entity.ExpiresAt
-            };
-
-            return Created($"/shorten/{entity.ShortCode}", response);
+            return BadRequest("Request body is required.");
         }
+
+        if (!TryNormalizeHttpUrl(request.Url, out var normalizedUrl))
+        {
+            _logger.LogWarning(
+                "Create short URL failed because input URL was invalid."
+            );
+
+            return BadRequest("Url must be a valid absolute http or https URL.");
+        }
+
+        if (request.ExpiresAt != null && request.ExpiresAt <= DateTime.UtcNow)
+        {   
+            _logger.LogWarning(
+                "Create short URL failed because ExpiresAt was in the past."
+            );
+
+            return BadRequest("The provided Expires Date is not valid");
+        }
+
+        string shortCode = GenerateUniqueShortCode();
+
+        var now = DateTime.UtcNow;
+        var entity = new ShortUrlStorage
+        {
+            Url = normalizedUrl,
+            ShortCode = shortCode,
+            CreatedAt = now,
+            UpdatedAt = now,
+            ExpiresAt = request.ExpiresAt,
+            AccessCount = 0
+        };
+
+        // The database unique constraint is the final guard against concurrent
+        // requests generating the same short code.
+        await SaveShortUrlWithRetryAsync(entity);
+            
+        _logger.LogInformation(
+            "Short URL created. ShortCode: {ShortCode}", entity.ShortCode
+        );
+
+        var response = new ShortUrlResponse
+        {
+            Id = entity.Id,
+            Url = entity.Url,
+            ShortCode = entity.ShortCode,
+            CreatedAt = entity.CreatedAt,
+            UpdatedAt = entity.UpdatedAt,
+            ExpiresAt = entity.ExpiresAt
+        };
+
+        return Created($"/shorten/{entity.ShortCode}", response);
+    }
     
     [HttpGet("{shortCode}")]
     public async Task<ActionResult<ShortUrlResponse>> GetByShortCode(string shortCode)
@@ -122,7 +124,7 @@ public class ShortenController : ControllerBase
         if (request is null)
         {
             _logger.LogWarning(
-                "Update short URL failed because the request body was mising. ShortCode: {ShortCode}", shortCode
+                "Update short URL failed because the request body was missing. ShortCode: {ShortCode}", shortCode
             );
 
             return BadRequest("Request body is required.");
